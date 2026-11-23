@@ -48,6 +48,13 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 #pbd.show{display:block}
 #pbd canvas{position:absolute;inset:0;width:100%;height:100%}
 .ship-ico{background:none;border:none}
+#story .st-alt{font-size:12px;color:#9fb0cc;letter-spacing:.2px;margin-bottom:4px;font-variant-numeric:tabular-nums}
+#story .st-alt b{font-size:19px;color:#fff;font-weight:800;margin:0 3px}
+.radar{position:absolute;left:50%;top:50%;width:150vmax;height:150vmax;margin:-75vmax 0 0 -75vmax;z-index:450;pointer-events:none;border-radius:50%;
+  background:conic-gradient(from 0deg,#3cff9a00 0deg,#3cff9a00 300deg,#3cff9a26 350deg,#3cff9a55 360deg);animation:sweep 4s linear infinite;display:none}
+.radar.on{display:block}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.plane-glow svg{filter:drop-shadow(0 0 4px currentColor)}
 #photo{position:fixed;inset:0;z-index:3;background:#000;opacity:0;pointer-events:none;transition:opacity 1.2s ease;overflow:hidden}
 #photo.show{opacity:1;pointer-events:auto}
 #photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:50% 40%}
@@ -67,11 +74,11 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 `;
 const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
 document.body.insertAdjacentHTML("beforeend", `
-<div id="layer"><div id="map"></div><div id="mapNote"></div><div id="cams"></div></div>
+<div id="layer"><div id="map"></div><div class="radar" id="radar"></div><div id="mapNote"></div><div id="cams"></div></div>
 <div id="pbd"><canvas id="pbdc"></canvas></div>
 <div id="photo"><div class="ph-load" id="phLoad"></div><img id="phImg" alt=""><div class="ph-shade"></div><div class="ph-cap" id="phCap"></div></div>
 <div id="story"><button class="st-x" id="stX" aria-label="이야기 끝내기">×</button>
-  <div class="st-t" id="stT"></div><div class="st-p" id="stP"></div><div class="st-live" id="stLive"></div>
+  <div class="st-alt" id="stAlt"></div><div class="st-t" id="stT"></div><div class="st-p" id="stP"></div><div class="st-live" id="stLive"></div>
   <div class="st-extra" id="stExtra"></div>
   <div class="st-row"><button id="stPrev">◀</button><button class="st-next" id="stNext">다음 ▶</button></div>
   <div class="st-dots" id="stDots"></div></div>
@@ -132,24 +139,35 @@ const SHIP_TYPE = t => !t ? "종류 미상" : t >= 60 && t < 70 ? "여객선" : 
   t === 30 ? "어선" : t === 31 || t === 32 || t === 52 ? "예인선" : t === 35 ? "군함" : t === 36 ? "범선" : t === 37 ? "레저 보트" :
   t === 50 ? "도선선" : t === 51 ? "수색구조선" : t === 55 ? "해경·경비정" : t >= 40 && t < 50 ? "고속선" : "기타 선박";
 const SHIP_COL = t => t >= 60 && t < 70 ? "#4fc3ff" : t >= 70 && t < 80 ? "#7ee081" : t >= 80 && t < 90 ? "#ff8a65" : t === 30 ? "#ffd166" : "#cfd6ea";
-let mapMode = null;
+let leaveTimer = null, mapMode = null, baseSat = null, baseDark = null, radarRings = null, mapWasShown = false;
 async function openMap(mode = "ships"){
+  clearTimeout(leaveTimer); $("layer").style.transition = ""; $("layer").style.opacity = "";
   mapMode = mode;
   $("layer").classList.add("show"); $("cams").classList.remove("show"); $("map").style.display = "block";
   loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
   await loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
   if (!map){
     map = L.map("map", { zoomControl: false, attributionControl: true }).setView([NOHWA.lat - 0.04, NOHWA.lon], 10);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 15, attribution: "© OpenStreetMap 기여자" }).addTo(map);
+    baseSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 17, attribution: "위성사진 © Esri, Maxar, Earthstar Geographics" });
+    baseDark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 15, subdomains: "abcd", attribution: "© OpenStreetMap 기여자 © CARTO" });
+    radarRings = L.layerGroup();
+    for (const km of [50, 100, 200]){ L.circle([NOHWA.lat, NOHWA.lon], { radius: km * 1000, color: "#3cff9a", weight: 1, opacity: 0.45, fill: false, dashArray: km === 200 ? null : "3 6" }).addTo(radarRings);
+      L.marker([NOHWA.lat + km / 111, NOHWA.lon], { icon: L.divIcon({ className: "ship-ico", html: `<span style="color:#3cff9a;font-size:10px;opacity:.8">${km}km</span>`, iconSize: [40, 12], iconAnchor: [20, 12] }) }).addTo(radarRings); }
     L.circleMarker([NOHWA.lat, NOHWA.lon], { radius: 6, color: "#ffb347", fillColor: "#ffb347", fillOpacity: 1 }).addTo(map).bindTooltip("노화도", { permanent: true, direction: "right" });
     shipLayer = L.layerGroup().addTo(map); planeLayer = L.layerGroup().addTo(map);
   }
   setTimeout(() => map.invalidateSize(), 50);
-  clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); shipLayer.clearLayers(); planeLayer.clearLayers();
+  const wasOpen = mapWasShown; mapWasShown = true;
+  if (mode === "ships"){ map.removeLayer(baseDark); baseSat.addTo(map); map.removeLayer(radarRings); $("radar").classList.remove("on"); }
+  else { radarRings.addTo(map); $("radar").classList.add("on"); }
+  clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); shipLayer.clearLayers(); planeLayer.clearLayers(); planeMarks.clear();
   if (ferryLayer) ferryLayer.clearLayers();
   if (mode === "ships"){ map.setView([34.2, 126.575], 11); drawFerryBase(); ferryNote = "⛴️ 여객선 운항 정보를 불러오는 중…"; aisNote = ""; renderSeaNote();
     loadFerries(); loadShips(); clearInterval(ferryTimer); ferryTimer = setInterval(updateFerries, 5000); shipTimer = setInterval(() => { loadShips(); loadFerries(); }, 60000); }
-  else { clearInterval(ferryTimer); map.setView([NOHWA.lat, NOHWA.lon], 7); loadPlanes(); planeTimer = setInterval(loadPlanes, 20000); planeAnim = setInterval(movePlanes, 1000); }
+  else { clearInterval(ferryTimer);
+    if (wasOpen){ map.flyTo([NOHWA.lat, NOHWA.lon], 7, { duration: 2.6 }); setTimeout(() => { if (mapMode === "planes"){ map.removeLayer(baseSat); baseDark.addTo(map); } }, 1300); }
+    else { map.setView([NOHWA.lat, NOHWA.lon], 7); map.removeLayer(baseSat); baseDark.addTo(map); }
+    loadPlanes(); planeTimer = setInterval(loadPlanes, 20000); planeAnim = setInterval(movePlanes, 1000); }
 }
 async function loadShips(){
   let d; try { d = await (await fetch("/api/ships")).json(); } catch (e) { d = { ok: false }; }
@@ -300,7 +318,7 @@ const airline = p => { const c = callsign(p), pre = c.slice(0, 3); return /^[A-Z
 const apKo = a => a ? (AIRPORTS[a.iata] || a.location || a.name || a.iata || "") : "";
 function planeIcon(p){
   const col = p.alt_baro === "ground" ? "#9aa3b5" : altCol(altM(p));
-  return L.divIcon({ className: "ship-ico", iconSize: [26, 26], iconAnchor: [13, 13],
+  return L.divIcon({ className: "ship-ico plane-glow", iconSize: [26, 26], iconAnchor: [13, 13],
     html: `<svg width="26" height="26" viewBox="-13 -13 26 26" style="transform:rotate(${p.track || 0}deg)"><path d="M0,-11 L2,-4 L10,1 L10,3 L2,1 L1.5,7 L4.5,9.5 L4.5,11 L0,10 L-4.5,11 L-4.5,9.5 L-1.5,7 L-2,1 L-10,3 L-10,1 L-2,-4 Z" fill="${col}" stroke="#000" stroke-width="1"/></svg>` });
 }
 function planePopup(p){
@@ -323,10 +341,11 @@ async function loadPlanes(){
   for (const p of d.ac){
     seen.add(p.hex);
     let o = planeMarks.get(p.hex);
-    if (!o){ o = { m: L.marker([p.lat, p.lon], { icon: planeIcon(p) }).addTo(planeLayer) }; planeMarks.set(p.hex, o); }
+    if (!o){ o = { m: L.marker([p.lat, p.lon], { icon: planeIcon(p) }).addTo(planeLayer), tr: L.polyline([], { weight: 2, opacity: 0.55, interactive: false }).addTo(planeLayer) }; planeMarks.set(p.hex, o); }
+    o.tr.setStyle({ color: p.alt_baro === "ground" ? "#9aa3b5" : altCol(altM(p)) });
     o.p = p; o.t0 = now; o.m.setLatLng([p.lat, p.lon]); o.m.setIcon(planeIcon(p)); o.m.bindPopup(planePopup(p));
   }
-  for (const [h, o] of planeMarks) if (!seen.has(h)){ planeLayer.removeLayer(o.m); planeMarks.delete(h); }
+  for (const [h, o] of planeMarks) if (!seen.has(h)){ planeLayer.removeLayer(o.m); planeLayer.removeLayer(o.tr); planeMarks.delete(h); }
   const high = d.ac.filter(p => altM(p) > 9000).length;
   note.innerHTML = d.ac.length ? `✈️ 지금 노화도 둘레 200km 하늘에 <b>${d.ac.length}대</b>${high ? ` · 그중 ${high}대는 9km 넘게 높이 나는 국제선급` : ""}<br><small>초록 3km 아래 · 노랑 3~9km · 파랑 9km 위 / 비행기를 누르면 항공편 정보 · 출처: ${d.source}</small>`
                                : "✈️ 지금 이 하늘에서 잡힌 비행기가 없어요. 남해안은 수신기가 적어 실제보다 적게 잡힐 수 있어요.";
@@ -348,7 +367,8 @@ function movePlanes(){
   for (const o of planeMarks.values()){
     const p = o.p; if (!p.gs || p.track == null || p.alt_baro === "ground") continue;
     const dt = Math.min(60, (now - o.t0) / 1000 + (p.seen_pos || 0)), dist = p.gs * 0.514444 * dt, tr = p.track * Math.PI / 180;
-    o.m.setLatLng([p.lat + dist * Math.cos(tr) / 111320, p.lon + dist * Math.sin(tr) / (111320 * Math.cos(p.lat * Math.PI / 180))]);
+    const ll = [p.lat + dist * Math.cos(tr) / 111320, p.lon + dist * Math.sin(tr) / (111320 * Math.cos(p.lat * Math.PI / 180))];
+    o.m.setLatLng(ll); const pts = o.tr.getLatLngs(); pts.push(ll); if (pts.length > 45) pts.shift(); o.tr.setLatLngs(pts);
   }
 }
 
@@ -377,7 +397,7 @@ function openISSLive(){
   openModal(`<iframe src="https://www.youtube.com/embed/live_stream?channel=UCLA_DiR1FfKNvjuUpBHmylQ&autoplay=1&mute=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`,
     `NASA 공식 생중계 (유튜브) · 화면이 안 나오면 <a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">NASA 생중계 목록</a>에서 'Live Video from the International Space Station'을 고르세요`);
 }
-function closeLayers(){ clearInterval(ferryTimer); $("layer").classList.remove("show"); $("cams").classList.remove("show"); clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null; $("pbd").classList.remove("show"); pbdOn = false; }
+function closeLayers(){ mapWasShown = false; $("radar").classList.remove("on"); clearInterval(ferryTimer); $("layer").classList.remove("show"); $("cams").classList.remove("show"); clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null; $("pbd").classList.remove("show"); pbdOn = false; }
 
 // ───────── 창백한 푸른 점 장면 ─────────
 let pbdOn = false, pbdT0 = 0;
@@ -458,38 +478,64 @@ function hidePhoto(){ phReq++; phOn = false; $("photo").classList.remove("show")
 function setPhotoBtn(){ const b = $("phBtn"); if (b) b.textContent = phOn ? (CH[cur].modelLabel || "🔭 모형으로 보기") : "📷 진짜 사진 보기"; }
 function preloadPhoto(i){ const c = CH[i]; if (!c || !c.photo) return; const ph = PH[c.photo]; if (typeof ph.src === "string") { const im = new Image(); im.src = ph.src; } }
 
+
+// ───────── 노화도에서 얼마나 멀리 왔나 (고도계) ─────────
+const LY_KM = 9.4607e12;
+let altShown = 0.001, altAnim = 0;
+function fmtAlt(km){
+  if (km < 0.002) return ["해발", "0", "m"];
+  if (km < 1) return ["", Math.round(km * 1000).toLocaleString(), "m"];
+  if (km < 10000) return ["", Math.round(km).toLocaleString(), "km"];
+  if (km < 1e8) return ["", (km / 1e4).toLocaleString(undefined, { maximumFractionDigits: km < 1e5 ? 1 : 0 }), "만 km"];
+  if (km < 0.05 * LY_KM) return ["", (km / 1e8).toLocaleString(undefined, { maximumFractionDigits: km < 1e10 ? 1 : 0 }), "억 km"];
+  const ly = km / LY_KM;
+  if (ly < 1e4) return ["", ly.toLocaleString(undefined, { maximumFractionDigits: ly < 10 ? 2 : 0 }), "광년"];
+  if (ly < 1e8) return ["", (ly / 1e4).toLocaleString(undefined, { maximumFractionDigits: ly < 1e5 ? 1 : 0 }), "만 광년"];
+  return ["", (ly / 1e8).toLocaleString(undefined, { maximumFractionDigits: 0 }), "억 광년"];
+}
+function setAlt(c){
+  let target = typeof c.alt === "function" ? c.alt() : c.alt;
+  if (target == null || isNaN(target)) { $("stAlt").innerHTML = ""; return; }
+  target = Math.max(0.001, target);
+  const from = Math.log10(altShown), to = Math.log10(target), t0 = performance.now(), dur = Math.min(2600, 700 + Math.abs(to - from) * 260), my = ++altAnim;
+  const step = now => { if (my !== altAnim) return;
+    const f = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - f, 3), v = Math.pow(10, from + (to - from) * e); altShown = v;
+    const [pre, num, unit] = fmtAlt(v);
+    $("stAlt").innerHTML = `${c.altNote ? c.altNote + " · " : (pre ? "노화도 · " : "노화도에서 ")}${pre ? pre + " " : ""}<b>${num}</b>${unit}`;
+    if (f < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
 // ───────── 이야기 ─────────
 const fmtLyOrKm = au => fmtDist(au);
 const CH = [
-  { t: "노화도 앞바다", layer: true, go(){ openMap("ships"); },
-    p: "출발은 노화도 앞바다예요. 땅끝과 산양, 화흥포와 동천, 이목과 넙도·당사를 잇는 뱃길로 <b>오늘도 여객선이 오가요</b>. 지도 위 파란 배는 오늘 운항표를 바탕으로 계산한 지금 위치예요." },
-  { t: "세계의 창", layer: true, go(){ openCams(); },
-    p: "같은 시각, 지구 어딘가는 한밤이고 어딘가는 막 해가 뜨고 있어요. 세계 곳곳에 공개된 카메라로 <b>지금 그곳</b>을 들여다봐요." },
-  { t: "노화도 하늘의 비행기", layer: true, go(){ openMap("planes"); },
-    p: "고개를 들면 노화도 하늘 높이 10km에도 길이 있어요. 제주와 김포를 오가는 국내선, 동남아와 중국으로 가는 국제선이 <b>지금 이 위를</b> 지나가고 있어요." },
-  { t: "우주정거장", face: true, photo: "iss", photoLater: true, go(){ closeLayers(); showISS = true; window.earthFace = () => { const q = issAt(new Date(simMs)); return q ? q.lon : 126.6; }; goTo("earth"); select(null); loadISS().then(ok => { if (!ok) live("우주정거장 궤도 데이터를 받지 못했어요."); }); },
-    p: "땅에서 약 420km 위. 국제우주정거장은 <b>90분마다 지구를 한 바퀴</b> 돌아서, 우주인들은 하루에 해돋이를 열여섯 번 봐요. 파란 선이 앞으로 45분 동안 지나갈 길이에요.",
+  { t: "노화도 앞바다", layer: true, alt: 0, go(){ openMap("ships"); },
+    p: "출발은 노화도 앞바다, 해발 0m예요. 위성 사진 위로 땅끝·산양, 화흥포·동천, 이목·넙도·당사를 잇는 뱃길에 <b>지금 오가는 여객선</b>이 떠 있어요. 오늘 운항표로 계산한 위치예요." },
+  { t: "노화도 하늘의 비행기", layer: true, alt: 10, go(){ openMap("planes"); },
+    p: "이제 하늘로 올라가요. 노화도 위 10km에도 길이 있어요. 레이더 화면 속 비행기들은 <b>지금 이 순간</b> 실제로 위치 신호를 보내는 비행기예요. 꼬리는 방금 지나온 길이에요." },
+  { t: "우주정거장", face: true, alt: 420, photo: "iss", photoLater: true, go(){ showISS = true; window.earthFace = () => { const q = issAt(new Date(simMs)); return q ? q.lon : 126.6; }; goTo("earth"); select(null); loadISS().then(ok => { if (!ok) live("우주정거장 궤도 데이터를 받지 못했어요."); }); },
+    p: "더 올라가 땅에서 약 420km 위. 국제우주정거장은 <b>90분마다 지구를 한 바퀴</b> 돌아서, 우주인들은 하루에 해돋이를 열여섯 번 봐요. 파란 선이 앞으로 45분 동안 지나갈 길이에요.",
     extra: [["📺 우주정거장 생중계", openISSLive]], live: true },
-  { t: "달", photo: "moon", go(){ closeLayers(); showISS = false; window.earthFace = null; goStep(0); },
+  { t: "달", alt: 384400, photo: "moon", go(){ closeLayers(); showISS = false; window.earthFace = null; goStep(0); },
     p: "38만 km, 빛으로 1.3초. 사람이 직접 가 본 가장 먼 곳이에요. 노화도의 <b>밀물과 썰물</b>을 만드는 것도 이 달입니다." },
-  { t: "태양과 이웃 행성", photo: "sun", go(){ goStep(1); },
+  { t: "태양과 이웃 행성", alt: 1.496e8, photo: "sun", go(){ goStep(1); },
     p: "태양까지 1억 5천만 km. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 태양을 떠난 빛이에요." },
-  { t: "태양계의 끝", photo: "saturn", go(){ goStep(2); },
+  { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
-  { t: "보이저 1호", photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
+  { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
     p: () => { const au = Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z), sec = au * LIGHT_AU_S;
       return `1977년에 떠난 보이저 1호는 지금 지구에서 약 <b>${fmtKm(au * AU_KM)}</b>, 빛으로도 <b>${fmtDur(sec)}</b> 걸리는 곳에 있어요. 50년 가까이 지난 지금도 집으로 신호를 보내고 있습니다.`; } },
-  { t: "창백한 푸른 점", pbd: true, photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
+  { t: "창백한 푸른 점", pbd: true, alt: 6e9, altNote: "1990년 보이저 1호의 자리", photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
     p: "1990년 2월 14일, 태양계 밖으로 나가던 보이저 1호가 카메라를 돌려 마지막으로 집을 찍었어요. 약 60억 km 떨어진 곳에서요. 사진 속 지구는 햇빛 줄기 사이에 떠 있는, <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>이 사진을 찍자고 한 천문학자 칼 세이건은 이 점을 <b>'창백한 푸른 점'</b>이라고 불렀어요. 그리고 지금까지 있었던 모든 사람과 모든 일이 저 점 하나 위에서 벌어졌다는 것, 그러니 서로를 조금 더 너그럽게 대하고 우리의 하나뿐인 집을 아껴야 한다는 이야기를 남겼어요." },
-  { t: "이웃 별", photo: "stars", go(){ closeLayers(); goStep(5); },
+  { t: "이웃 별", alt: 4.24 * LY_KM, photo: "stars", go(){ closeLayers(); goStep(5); },
     p: "가장 가까운 별, 프록시마 센타우리까지 빛으로 4년 3개월. 보이저 1호의 속도로 가면 <b>7만 년이 넘게</b> 걸려요." },
-  { t: "우리 은하", photo: "milkyway", go(){ goStep(8); },
+  { t: "우리 은하", alt: 26000 * LY_KM, altNote: "은하 중심까지", photo: "milkyway", go(){ goStep(8); },
     p: "별 1,000억 개가 넘는 우리 은하. 태양은 그중 평범한 별 하나이고, 노화도는 그 별을 도는 작은 행성의 작은 섬이에요." },
-  { t: "안드로메다 은하", photo: "andromeda", go(){ goStep(10); },
+  { t: "안드로메다 은하", alt: 2.5e6 * LY_KM, photo: "andromeda", go(){ goStep(10); },
     p: "지금 보이는 안드로메다의 빛은 <b>250만 년 전</b>에 출발했어요. 그 빛이 떠날 때 지구에는 아직 사람이 없었어요." },
-  { t: "볼 수 있는 우주의 끝", photo: "deep", go(){ goStep(12); },
+  { t: "볼 수 있는 우주의 끝", alt: 4.65e10 * LY_KM, photo: "deep", go(){ goStep(12); },
     p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에만 <b>은하가 수천억 개</b> 있어요." },
-  { t: "다시 노화도로", face: true, photo: "earth", go(){ closeLayers(); showISS = false; window.earthFace = () => 126.6; follow = null; goTo("earth"); select(null); setTimeout(() => { follow = "earth"; }, 4000); },
+  { t: "다시 노화도로", face: true, alt: 0, altNote: "다시 집", photo: "earth", go(){ closeLayers(); showISS = false; window.earthFace = () => 126.6; follow = null; goTo("earth"); select(null); setTimeout(() => { follow = "earth"; }, 4000); },
     p: () => { const kst = new Date(simMs + 9*3600000), hh = kst.getUTCHours();
       return `그리고 다시 집으로. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. 오늘도 앞바다에는 배가 오가고, 달이 끌어당기는 대로 물이 들고 납니다.`; },
     last: true }
@@ -507,7 +553,14 @@ function show(i){
   $("stDots").innerHTML = CH.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("");
   live(""); clearInterval(liveTimer);
   if (c.live) liveTimer = setInterval(updateISSLive, 1000);
-  if (!c.layer) closeLayers();
+  if (!c.layer){
+    if (mapMode === "planes" && map){   // 하늘에서 우주로: 지도가 멀어지며 사라져요
+      const lay = $("layer"); map.flyTo([NOHWA.lat, NOHWA.lon], 3, { duration: 1.8 });
+      lay.style.transition = "opacity 1.2s ease .7s"; lay.style.opacity = 0;
+      leaveTimer = setTimeout(() => { closeLayers(); lay.style.transition = ""; lay.style.opacity = ""; }, 2000);
+    } else closeLayers();
+  }
+  setAlt(c);
   if (!c.pbd) { $("pbd").classList.remove("show"); pbdOn = false; }
   if (!c.face) window.earthFace = null;
   c.go();
