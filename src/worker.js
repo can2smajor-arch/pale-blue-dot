@@ -122,7 +122,7 @@ async function webcams(env, url) {
     } catch (e) { return { region, err: "연결 실패", webcams: [] }; }
   }));
   const all = results.flatMap(x => x.webcams.map(w => ({ ...w, _region: x.region })));
-  if (!all.length) return json({ ok: false, error: "웹캠을 받지 못했어요", detail: results.map(x => `${x.region}:${x.err || 0}`).join(" ") }, { status: 502 });
+  if (!all.length){ const r = json({ ok: false, error: "웹캠을 받지 못했어요", detail: results.map(x => `${x.region}:${x.err || 0}`).join(" ") }); r.headers.set("x-no-cache", "1"); return r; }
   const cams = all.map(w => ({ region: w._region,
     id: w.webcamId, title: w.title, city: w.location && w.location.city, country: w.location && w.location.country,
     lat: w.location && w.location.latitude, lon: w.location && w.location.longitude,
@@ -184,10 +184,43 @@ async function routes(request) {
   } catch { return json([]); }
 }
 
+
+// ── 점검용: 배·웹캠 서비스가 실제로 어떻게 답하는지 (키 값은 내보내지 않음) ──
+async function diag(env) {
+  const out = { time: new Date().toISOString(), hasAisKey: !!env.AISSTREAM_KEY, hasWindyKey: !!env.WINDY_KEY };
+  if (env.WINDY_KEY) {
+    for (const [label, extra] of [["plain", {}], ["nearby", { nearby: "36.5,127.8,350" }]]) {
+      const q = new URLSearchParams({ limit: "3", include: "location", ...extra });
+      try { const r = await getText("https://api.windy.com/webcams/api/v3/webcams?" + q, 8000, { "x-windy-api-key": env.WINDY_KEY });
+        let n = null; try { n = (JSON.parse(r.text).webcams || []).map(w => w.location && w.location.city); } catch {}
+        out["windy_" + label] = { status: r.status, cities: n, body: n ? undefined : r.text.slice(0, 160) };
+      } catch (e) { out["windy_" + label] = { error: String(e.message || e) }; }
+    }
+  }
+  if (env.AISSTREAM_KEY) {
+    const a = out.ais = {};
+    try {
+      const resp = await fetch("https://stream.aisstream.io/v0/stream", { headers: { Upgrade: "websocket" } });
+      a.status = resp.status; const ws = resp.webSocket; a.gotSocket = !!ws;
+      if (ws) {
+        ws.accept(); a.msgs = 0; a.first = null;
+        ws.addEventListener("message", ev => { a.msgs++; if (!a.first) a.first = (typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data)).slice(0, 160); });
+        ws.addEventListener("close", ev => { a.closed = `${ev.code} ${ev.reason || ""}`; });
+        ws.addEventListener("error", ev => { a.err = String(ev.message || "error"); });
+        ws.send(JSON.stringify({ APIKey: env.AISSTREAM_KEY, BoundingBoxes: [[[33.0, 125.0], [35.5, 128.5]]] }));
+        await new Promise(r => setTimeout(r, 5000));
+        try { ws.close(1000, "diag"); } catch {}
+      } else { a.body = (await resp.text()).slice(0, 160); }
+    } catch (e) { a.error = String(e.message || e); }
+  }
+  return json(out);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/iss") return cached(request, ctx, 3 * 3600, iss);
+    if (url.pathname === "/api/diag") return diag(env);
     if (url.pathname === "/api/planes") return cached(request, ctx, 15, () => planes(url));
     if (url.pathname === "/api/routes" && request.method === "POST") return routes(request);
     if (url.pathname === "/api/ships") return cached(request, ctx, 60, () => ships(env));
