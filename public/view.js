@@ -418,6 +418,62 @@ function hidden(c, P){   // 지구에 가려지나
   const o = c.pos, d = sub(P, o), L = len(d), dn = mul(d, 1 / L), b = dot(o, dn), cc = dot(o, o) - (R - 0.05) * (R - 0.05), h = b*b - cc;
   if (h < 0) return false; const t = -b - Math.sqrt(h); return t > 0 && t < L;
 }
+// ── 눈앞의 것들: 배 난간, 갈매기, 비행기 날개와 옆을 나는 여객기, 우주정거장 ──
+let prop = null, propT0 = 0;
+function drawProps(g, t){
+  if (!prop) return; const W = innerWidth, H = innerHeight, a = Math.min(1, (performance.now() - propT0) / 1200);
+  g.save(); g.globalAlpha = a;
+  if (prop === "ship"){
+    const y = H * 0.565 + Math.sin(t * 1.3) * 5, tilt = Math.sin(t * 0.9) * 0.012;
+    g.translate(W / 2, y); g.rotate(tilt); g.translate(-W / 2, 0);
+    const dk = g.createLinearGradient(0, 30, 0, 140); dk.addColorStop(0, "#d9dde2"); dk.addColorStop(1, "#8d949c");
+    g.fillStyle = dk; g.beginPath(); g.moveTo(-20, 62); g.lineTo(W * 0.5, 40); g.lineTo(W + 20, 62); g.lineTo(W + 20, H); g.lineTo(-20, H); g.fill();     // 뱃머리 갑판
+    g.strokeStyle = "#f4f6f8"; g.lineCap = "round";
+    for (const [dy, lw] of [[0, 4], [18, 2.5], [34, 2.5]]){ g.lineWidth = lw; g.beginPath(); g.moveTo(-20, 22 + dy); g.quadraticCurveTo(W * 0.5, -4 + dy, W + 20, 22 + dy); g.stroke(); }   // 난간
+    g.lineWidth = 3.5; for (let i = 0; i <= 6; i++){ const x = W * i / 6, u = i / 6, top = 22 - 26 * 4 * u * (1 - u) * 0.5 - 0; g.beginPath(); g.moveTo(x, top); g.lineTo(x, top + 52); g.stroke(); }
+    g.fillStyle = "#c8452f"; g.beginPath(); g.arc(W * 0.14, 34, 15, 0, 7); g.fill(); g.fillStyle = "#f4f6f8"; g.beginPath(); g.arc(W * 0.14, 34, 7.5, 0, 7); g.fill();          // 구명튜브
+  } else if (prop === "gull"){
+    for (let i = 0; i < 4; i++){
+      const sp = 0.035 + i * 0.008, x = ((t * sp + i * 0.31) % 1.3 - 0.15) * W, y = H * (0.2 + i * 0.07) + Math.sin(t * 0.7 + i * 2) * 14, s = 34 - i * 6, fl = Math.sin(t * (5 + i) + i) * 0.5 + 0.15;
+      g.strokeStyle = "#f7f7f5"; g.lineWidth = Math.max(1.6, s * 0.13); g.lineCap = "round"; g.lineJoin = "round";
+      g.beginPath(); g.moveTo(x - s, y - s * fl); g.quadraticCurveTo(x - s * 0.45, y - s * (0.25 + fl * 0.5), x, y); g.quadraticCurveTo(x + s * 0.45, y - s * (0.25 + fl * 0.5), x + s, y - s * fl); g.stroke();
+      g.fillStyle = "#f7f7f5"; g.beginPath(); g.ellipse(x, y + 1, s * 0.22, s * 0.1, 0, 0, 7); g.fill();
+      g.strokeStyle = "#333"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x - s, y - s * fl); g.lineTo(x - s * 0.86, y - s * fl * 0.93); g.moveTo(x + s, y - s * fl); g.lineTo(x + s * 0.86, y - s * fl * 0.93); g.stroke();
+    }
+  } else if (prop === "plane"){
+    // 옆을 나란히 나는 여객기와 비행운
+    const px = W * (0.60 + Math.sin(t * 0.11) * 0.05), py = H * (0.27 + Math.sin(t * 0.17) * 0.012), s = 0.62;
+    const tr = g.createLinearGradient(px - 300, 0, px - 20, 0); tr.addColorStop(0, "#ffffff00"); tr.addColorStop(1, "#ffffffb0");
+    g.strokeStyle = tr; g.lineWidth = 3; g.beginPath(); g.moveTo(px - 300, py + 9); g.lineTo(px - 26 * s, py + 5); g.moveTo(px - 300, py + 15); g.lineTo(px - 26 * s, py + 9); g.stroke();
+    g.save(); g.translate(px, py); g.scale(s, s);
+    g.fillStyle = "#f3f5f8"; g.beginPath(); g.moveTo(-70, 0); g.quadraticCurveTo(-70, -9, -50, -9); g.lineTo(52, -9); g.quadraticCurveTo(74, -6, 80, 2); g.quadraticCurveTo(70, 9, 50, 9); g.lineTo(-50, 9); g.quadraticCurveTo(-64, 8, -70, 0); g.fill();   // 몸통
+    g.fillStyle = "#2f6fd0"; g.beginPath(); g.moveTo(-66, -6); g.lineTo(-84, -34); g.lineTo(-70, -34); g.lineTo(-44, -9); g.fill();                                // 꼬리날개
+    g.fillStyle = "#c9ced6"; g.beginPath(); g.moveTo(8, 4); g.lineTo(-34, 30); g.lineTo(-22, 30); g.lineTo(30, 6); g.fill();                                     // 날개
+    g.fillStyle = "#9aa1ab"; g.beginPath(); g.ellipse(0, 15, 11, 4.5, -0.1, 0, 7); g.fill();                                                                      // 엔진
+    g.fillStyle = "#3b4a5e"; for (let i = 0; i < 14; i++) g.fillRect(-40 + i * 6.4, -4, 3, 3); g.beginPath(); g.moveTo(62, -5); g.lineTo(72, -2); g.lineTo(62, -1); g.fill();
+    g.restore();
+    // 내 창가 자리의 날개
+    const wy = H * 0.50 + Math.sin(t * 0.8) * 3;
+    const wg = g.createLinearGradient(0, wy - 40, 0, wy + 120); wg.addColorStop(0, "#e9edf2"); wg.addColorStop(1, "#8f98a4");
+    g.fillStyle = wg; g.beginPath(); g.moveTo(-10, wy + 36); g.lineTo(W * 0.80, wy - 20); g.lineTo(W * 0.86, wy - 62); g.lineTo(W * 0.895, wy - 60); g.lineTo(W * 0.885, wy - 6); g.lineTo(W * 0.5, wy + 70); g.lineTo(-10, wy + 150); g.fill();
+    g.strokeStyle = "#6f7885"; g.lineWidth = 1; g.beginPath(); g.moveTo(-10, wy + 80); g.lineTo(W * 0.84, wy - 8); g.moveTo(W * 0.3, wy + 20); g.lineTo(W * 0.36, wy + 92); g.stroke();
+    g.fillStyle = "#2f6fd0"; g.beginPath(); g.moveTo(W * 0.86, wy - 62); g.lineTo(W * 0.895, wy - 60); g.lineTo(W * 0.891, wy - 38); g.lineTo(W * 0.852, wy - 40); g.fill();
+  } else if (prop === "iss"){
+    const cx = W * 0.5 + Math.sin(t * 0.13) * 10, cy = H * 0.22 + Math.sin(t * 0.19) * 6;
+    g.translate(cx, cy); g.rotate(-0.22 + Math.sin(t * 0.07) * 0.03); const s = Math.min(1.25, W / 400); g.scale(s, s);
+    const panel = (x, y, w, h) => { const gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, "#c9963c"); gr.addColorStop(0.5, "#8a6220"); gr.addColorStop(1, "#d8a850");
+      g.fillStyle = gr; g.fillRect(x, y, w, h); g.strokeStyle = "#3a2a10"; g.lineWidth = 0.6; for (let i = 1; i < 8; i++){ g.beginPath(); g.moveTo(x, y + h * i / 8); g.lineTo(x + w, y + h * i / 8); g.stroke(); } g.beginPath(); g.moveTo(x + w / 2, y); g.lineTo(x + w / 2, y + h); g.stroke(); };
+    for (const x of [-150, -118, 96, 128]){ panel(x, -66, 22, 56); panel(x, 10, 22, 56); }                         // 태양 전지판 8장
+    g.fillStyle = "#aeb4bc"; g.fillRect(-156, -5, 312, 10);                                                           // 큰 뼈대
+    g.strokeStyle = "#5c636d"; g.lineWidth = 0.8; for (let i = -150; i < 150; i += 12){ g.beginPath(); g.moveTo(i, -5); g.lineTo(i + 6, 5); g.lineTo(i + 12, -5); g.stroke(); }
+    g.fillStyle = "#e6e9ee"; for (const x of [-58, 40]) g.fillRect(x, 8, 18, 34);                                    // 방열판
+    const mod = (x, y, w, h) => { const gr = g.createLinearGradient(x, y, x, y + h); gr.addColorStop(0, "#f2f4f7"); gr.addColorStop(1, "#8d949e"); g.fillStyle = gr; g.beginPath(); g.roundRect(x, y, w, h, Math.min(w, h) / 2.4); g.fill(); };
+    mod(-9, -62, 18, 124); mod(-44, -34, 88, 15); mod(-30, 24, 60, 14); mod(-7, 62, 14, 26);                         // 사람이 사는 방들
+    g.fillStyle = "#ffd98a"; g.beginPath(); g.arc(0, 30, 2.2, 0, 7); g.fill();
+  }
+  g.restore();
+}
+
 function drawOverlay(c, A){
   const g = ovl.getContext("2d"), d = Math.min(devicePixelRatio || 1, 2);
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ovl.width, ovl.height); g.setTransform(d, 0, 0, d, 0, 0);
@@ -442,6 +498,7 @@ function drawOverlay(c, A){
     g.lineWidth = 3; g.strokeStyle = "#000a"; g.strokeText(m.label, tx, ty); g.fillStyle = "#fff"; g.fillText(m.label, tx, ty);
     if (m.sub){ g.font = "11px sans-serif"; g.strokeText(m.sub, tx, ty + 14); g.fillStyle = "#cfd8ea"; g.fillText(m.sub, tx, ty + 14); g.font = "600 12px sans-serif"; }
   }
+  drawProps(g, performance.now() / 1000);
 }
 
 function show(){ if (!init()) return false; on = true; cvs.classList.add("show"); ovl.classList.add("show"); cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); return true; }
@@ -453,7 +510,7 @@ window.PV = {
   get state(){ return state; }, get on(){ return on; }, get ready(){ return ready; },
   set(s){ anim = null; Object.assign(state, s); },
   setMarkers(m){ markers = m || []; }, setBob(b){ bob = b; }, setDrift(dps){ drift = dps; }, setFollow(fn){ follow = fn; },
-  setTimeOffset(ms){ timeOffset = ms; }, setPatch, get real(){ return real; }, get anim(){ return !!anim; }, get timeOffset(){ return timeOffset; }, now,
+  setTimeOffset(ms){ timeOffset = ms; }, setPatch, setProp(n){ if (n !== prop){ prop = n; propT0 = performance.now(); } }, get real(){ return real; }, get anim(){ return !!anim; }, get timeOffset(){ return timeOffset; }, now,
   onFrame(fn){ listeners.push(fn); },
   supported(){ try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); } catch (e) { return false; } },
   REG

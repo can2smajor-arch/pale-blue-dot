@@ -553,7 +553,7 @@ function timeChip(){
   const off = PV.timeOffset;
   return off ? `🕐 시간을 옮겨 본 장면 · <b>${kstStr(PV.now())}</b>` : `🕐 지금 이 시각 · ${kstStr(Date.now())}`;
 }
-function pvEnter(){ closeLayers(); hidePhoto(); window.earthFace = null; clearInterval(pvTimer); PV.show(); PV.setFollow(null); PV.setDrift(0); PV.setBob(false); }
+function pvEnter(){ PV.setProp(null); closeLayers(); hidePhoto(); window.earthFace = null; clearInterval(pvTimer); PV.show(); PV.setFollow(null); PV.setDrift(0); PV.setBob(false); }
 function pvLeave(){ clearInterval(pvTimer); if (window.PV) PV.hide(); }
 function pvFerryMarks(){
   if (!ferryData) return [];
@@ -611,7 +611,7 @@ function issCam(){
 
 const CH = [
   { t: "배 갑판 위에서", pv: true, alt: 0.004, altNote: "눈높이", go(){
-      pvEnter(); PV.setBob(true);
+      pvEnter(); PV.setBob(true); PV.setProp("ship");
       PV.flyTo({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 }, 1500);
       loadFerries();
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000);
@@ -619,12 +619,12 @@ const CH = [
     extra: () => [...dayBtn(), ["🗺️ 뱃길 지도", () => $("layer").classList.contains("show") ? closeLayers() : openMap("ships")]],
     p: "땅끝에서 산양으로 가는 배 갑판. 당신 눈높이는 바다 위 <b>4m</b>예요. 여기서 보이는 수평선까지는 고작 7km. 사람은 평생 대부분을 이 높이에서 살아요.<br><br>자, 이제 올라가 볼까요? 하늘빛과 해의 자리는 <b>지금 이 시각 그대로</b>예요." },
   { t: "갈매기 눈높이", pv: true, alt: 0.35, liveAlt: "바다 위", go(){
-      pvEnter(); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => PV.setDrift(0.8), 5000);
+      pvEnter(); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setProp("gull"); }, 2500); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => PV.setDrift(0.8), 5000);
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000); PV.note(timeChip()); },
     extra: () => [...dayBtn()],
     p: "아파트 100층 높이. 갈매기에게는 평범한 출근길이에요. 노화도와 보길도 사이 바다에 네모난 점들이 보이나요? <b>전복 양식장</b>이에요. 실제 위성 사진과 실제 산 높이로 만든 풍경이에요." },
   { t: "비행기 창가 자리", pv: true, alt: 10.5, liveAlt: "바다 위", go(){
-      pvEnter(); PV.flyTo({ lat: 34.40, lon: 126.40, alt: 10.5, az: 150, el: -11, fov: 70 }, 6000);
+      pvEnter(); setTimeout(() => { if (CH[cur].t === "비행기 창가 자리") PV.setProp("plane"); }, 4500); PV.flyTo({ lat: 34.40, lon: 126.40, alt: 10.5, az: 150, el: -11, fov: 70 }, 6000);
       loadPvPlanes(); let k = 0;
       const upd = () => { PV.setMarkers([...islandMarks(), ...pvPlaneMarks()]); if (++k % 15 === 0) loadPvPlanes(); }; upd(); pvTimer = setInterval(upd, 1000);
       PV.note(timeChip() + "<br>✈️ 점은 지금 이 하늘을 실제로 날고 있는 비행기예요"); },
@@ -641,10 +641,10 @@ const CH = [
   { t: "우주정거장 창밖", pv: true, alt: 420, liveAlt: "땅에서", photo: "iss", photoLater: true, go(){
       pvEnter(); PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 10, color: "#ffb347" }]);
       const go2 = () => { const c = issCam(); if (!c) { PV.flyTo({ lat: 30, lon: 126.6, alt: 420, az: 20, el: -27, fov: 75 }, 5000); return; }
-        PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); if (q && Math.random() < 0.01) PV.setPatch(q.lat, q.lon); return q ? { ...q } : null; }); }, 5100); PV.setPatch(c.lat, c.lon); };
+        PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setProp("iss"); }, 4000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); if (q && Math.random() < 0.01) PV.setPatch(q.lat, q.lon); return q ? { ...q } : null; }); }, 5100); PV.setPatch(c.lat, c.lon); };
       loadISS().then(go2); PV.note(timeChip()); },
     extra: () => [["📺 우주정거장 생중계", openISSLive]], live: true,
-    p: "땅에서 420km 위, 국제우주정거장 창밖이에요. 지금 이 순간 정거장이 실제로 지나는 자리에서 본 모습이에요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
+    p: "땅에서 420km 위. 눈앞에 떠 있는 게 축구장만 한 <b>국제우주정거장</b>이에요. 지금 이 순간에도 사람이 저 안에 살고 있어요. 아래 지구는 정거장이 지금 실제로 지나는 자리예요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
   { t: "멀어지는 지구", pv: true, alt: 30000, liveAlt: "지구에서", go(){
       PV.setPatch(34, 127);
       pvEnter(); PV.set({ lat: 30, lon: 126.6, alt: 1500, az: 0, el: -89.9, fov: 60 });
@@ -659,7 +659,7 @@ const CH = [
     p: "가만히 앉아 있다고 생각했죠? 태양은 초속 230km로 은하를 돌고, 행성들은 그 둘레를 돌며 따라가요. 그래서 지구가 우주에 그리는 길은 동그라미가 아니라 <b>끝없는 나선</b>이에요. 당신은 태어나서 단 한 번도 같은 자리에 있었던 적이 없어요." },
   { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
-  { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
+  { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, go(){ closeLayers(); goTo("voyager1"); select(null); },
     p: () => { const au = Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z), sec = au * LIGHT_AU_S;
       return `1977년에 떠난 보이저 1호는 지금 지구에서 약 <b>${fmtKm(au * AU_KM)}</b>, 빛으로도 <b>${fmtDur(sec)}</b> 걸리는 곳에 있어요. 50년 가까이 지난 지금도 집으로 신호를 보내고 있습니다.`; } },
   { t: "창백한 푸른 점", pbd: true, alt: 6e9, altNote: "1990년 보이저 1호의 자리", photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
@@ -673,7 +673,7 @@ const CH = [
   { t: "볼 수 있는 우주의 끝", alt: 4.65e10 * LY_KM, photo: "deep", go(){ goStep(12); },
     p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에만 <b>은하가 수천억 개</b> 있어요." },
   { t: "다시 배 위로", pv: true, alt: 0.004, altNote: "다시 배 갑판", go(){
-      pvEnter(); PV.setBob(true); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
+      pvEnter(); PV.setBob(true); PV.setProp("ship"); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
       PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); PV.note(timeChip()); },
     p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours();
       return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. ${journeyStats()}<br><br>그 모든 일이 저 작은 점 위에서, 바로 이곳에서 일어났어요.`; },
