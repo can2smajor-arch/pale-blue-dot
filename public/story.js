@@ -24,7 +24,7 @@ const css = `
 #story .st-extra{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
 #story .st-extra button{border-radius:999px;padding:7px 12px;font-size:12.5px;border:1px solid #ffffff30;background:#ffffff12;color:var(--ink)}
 body.storying #steps, body.storying #nav, body.storying #card, body.storying #hud{display:none!important}
-#layer{position:fixed;inset:0;z-index:3;display:none;background:#02030a}
+#layer{position:fixed;inset:0;z-index:4;display:none;background:#02030a}
 #layer.show{display:block}
 #map{position:absolute;inset:0}
 #mapNote{position:absolute;left:12px;right:12px;top:60px;z-index:500;background:#0b1020e8;color:#e9edf8;border:1px solid #ffffff25;border-radius:12px;
@@ -508,18 +508,118 @@ function setAlt(c){
 
 // ───────── 이야기 ─────────
 const fmtLyOrKm = au => fmtDist(au);
+
+// ───────── 사람 눈높이 장면 (view.js) ─────────
+const ISLANDS = [["노화도", 34.19, 126.575, 0.25], ["보길도", 34.143, 126.55, 0.3], ["소안도", 34.16, 126.655, 0.25], ["땅끝", 34.298, 126.527, 0.12],
+  ["넙도", 34.198, 126.49, 0.1], ["완도", 34.31, 126.75, 0.2], ["횡간도", 34.275, 126.57, 0.1], ["해남", 34.36, 126.56, 0.3]];
+const islandMarks = () => ISLANDS.map(([label, lat, lon, alt]) => ({ label, lat, lon, alt, maxAlt: 25, maxDist: 60 }));
+let pvTimer = null, pvPlanes = [], pvPlaneT = 0;
+const kstStr = ms => { const d = new Date(ms + 9 * 3600000); return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+const HERE = { lat: 34.2, lon: 126.6, alt: 0.01 };
+function sunEl(ms = PV.now()){ return PV.azel(HERE, PV.ecef(0, 0, 0).map((x, k) => x + PV.astro(ms).sun[k] * 1.5e8)).el; }
+function bodyAzel(from, which, ms = PV.now()){ const A = PV.astro(ms); return which === "moon" ? PV.azel(from, A.moon) : PV.azel(from, A.sun.map(x => x * 1.5e8)); }
+function findTime(pred){ const t0 = Date.now(); for (let m = 0; m < 48 * 60; m += 10){ const ms = t0 + m * 60000; if (pred(ms)) return ms - Date.now(); } return null; }
+function timeChip(){
+  const off = PV.timeOffset;
+  return off ? `🕐 시간을 옮겨 본 장면 · <b>${kstStr(PV.now())}</b>` : `🕐 지금 이 시각 · ${kstStr(Date.now())}`;
+}
+function pvEnter(){ closeLayers(); hidePhoto(); window.earthFace = null; clearInterval(pvTimer); PV.show(); PV.setFollow(null); PV.setDrift(0); PV.setBob(false); }
+function pvLeave(){ clearInterval(pvTimer); if (window.PV) PV.hide(); }
+function pvFerryMarks(){
+  if (!ferryData) return [];
+  const now = (() => { const d = new Date(PV.now() + 9 * 3600000); return d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60; })();
+  const out = [];
+  for (const it of ferryData.items){ if (/비운|통제|결항/.test(it.se)) continue; const at = ferryNow(it, now); if (!at || at.docked) continue;
+    out.push({ kind: "ship", lat: at.lat, lon: at.lon, alt: 0.003, label: it.ship, sub: `${at.from}→${at.to}`, color: "#4fc3ff", maxAlt: 25, maxDist: 40 }); }
+  return out;
+}
+async function loadPvPlanes(){
+  try { const d = await (await fetch(`/api/planes?lat=${NOHWA.lat}&lon=${NOHWA.lon}&nm=${PLANE_NM}`)).json(); if (d.ok) { pvPlanes = d.ac.filter(p => p.alt_baro !== "ground"); pvPlaneT = Date.now(); } } catch (e) {}
+}
+function pvPlaneMarks(){
+  const dt = (Date.now() - pvPlaneT) / 1000;
+  return pvPlanes.map(p => { const dist = (p.gs || 0) * 0.514444 * Math.min(60, dt), tr = (p.track || 0) * Math.PI / 180;
+    const lat = p.lat + dist * Math.cos(tr) / 111320, lon = p.lon + dist * Math.sin(tr) / (111320 * Math.cos(p.lat * Math.PI / 180)), m = altM(p);
+    return { kind: "plane", lat, lon, alt: m / 1000, label: callsign(p) || p.r || "비행기", sub: `${airline(p) || ""} ${(m / 1000).toFixed(1)}km`.trim(), color: altCol(m), maxDist: 400 }; });
+}
+function dayButton(){
+  return [PV.timeOffset ? "🕐 지금 시각으로" : "☀️ 낮 풍경으로", () => {
+    if (PV.timeOffset) PV.setTimeOffset(0);
+    else { const off = findTime(ms => { const a = bodyAzel(HERE, "sun", ms); return a.el > 18 && a.el < 32 && a.az > 180; }); if (off != null) PV.setTimeOffset(off); }
+    show(cur); }];
+}
+function dayBtn(){ return (PV.timeOffset || sunEl() < 5) ? [dayButton()] : []; }
+function seeBody(which, alt, fov){
+  const from = { lat: 34.2, lon: 126.6, alt };
+  let a = bodyAzel(from, which);
+  const dip = -Math.acos(6371 / (6371 + alt)) * 180 / Math.PI;
+  const name = which === "moon" ? "달" : "해";
+  if (a.el < dip + 1){
+    PV.flyTo({ ...from, az: a.az, el: Math.max(a.el, -3), fov: 50 }, 4000);
+    const off = findTime(ms => bodyAzel(from, which, ms).el > 20);
+    PV.note(`${which === "moon" ? "🌙" : "☀️"} 지금 ${which === "moon" ? "달은" : "해는"} 지구 반대편, 지평선 아래에 있어요.` + (off != null ? ` 다음에 높이 뜨는 때는 <b>${kstStr(Date.now() + off)}</b>쯤이에요.` : ""));
+    return off;
+  }
+  PV.flyTo({ ...from, az: a.az, el: a.el, fov }, 5000);
+  PV.note(`${which === "moon" ? "🌙" : "☀️"} ${which === "moon" ? "달은" : "해는"} 지금 노화도에서 ${["북", "북동", "동", "남동", "남", "남서", "서", "북서"][Math.round(a.az / 45) % 8]}쪽 하늘, 고도 ${Math.round(a.el)}°에 있어요` +
+    (which === "moon" ? ` · 밝은 부분 ${Math.round(PV.astro(PV.now()).illum * 100)}%` : ""));
+  return null;
+}
+function jumpButton(which){
+  return [which === "moon" ? "🌙 달이 뜬 시각으로 가 보기" : "☀️ 해가 뜬 시각으로 가 보기", () => {
+    const from = { lat: 34.2, lon: 126.6, alt: 35 }, off = findTime(ms => bodyAzel(from, which, ms).el > 20);
+    if (off != null){ PV.setTimeOffset(off); show(cur); } }];
+}
+let issFollowOn = false;
+function issCam(){
+  const t = new Date(PV.now()), a = issAt(t), b = issAt(new Date(t.getTime() + 20000));
+  if (!a || !b) return null;
+  const y = Math.sin((b.lon - a.lon) * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180);
+  const x = Math.cos(a.lat * Math.PI / 180) * Math.sin(b.lat * Math.PI / 180) - Math.sin(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.cos((b.lon - a.lon) * Math.PI / 180);
+  return { lat: a.lat, lon: a.lon, alt: 420, az: (Math.atan2(y, x) * 180 / Math.PI + 360) % 360 };
+}
+
 const CH = [
-  { t: "노화도 앞바다", layer: true, alt: 0, go(){ openMap("ships"); },
-    p: "출발은 노화도 앞바다, 해발 0m예요. 위성 사진 위로 땅끝·산양, 화흥포·동천, 이목·넙도·당사를 잇는 뱃길에 <b>지금 오가는 여객선</b>이 떠 있어요. 오늘 운항표로 계산한 위치예요." },
-  { t: "노화도 하늘의 비행기", layer: true, alt: 10, go(){ openMap("planes"); },
-    p: "이제 하늘로 올라가요. 노화도 위 10km에도 길이 있어요. 레이더 화면 속 비행기들은 <b>지금 이 순간</b> 실제로 위치 신호를 보내는 비행기예요. 꼬리는 방금 지나온 길이에요." },
-  { t: "우주정거장", face: true, alt: 420, photo: "iss", photoLater: true, go(){ showISS = true; window.earthFace = () => { const q = issAt(new Date(simMs)); return q ? q.lon : 126.6; }; goTo("earth"); select(null); loadISS().then(ok => { if (!ok) live("우주정거장 궤도 데이터를 받지 못했어요."); }); },
-    p: "더 올라가 땅에서 약 420km 위. 국제우주정거장은 <b>90분마다 지구를 한 바퀴</b> 돌아서, 우주인들은 하루에 해돋이를 열여섯 번 봐요. 파란 선이 앞으로 45분 동안 지나갈 길이에요.",
-    extra: [["📺 우주정거장 생중계", openISSLive]], live: true },
-  { t: "달", alt: 384400, photo: "moon", go(){ closeLayers(); showISS = false; window.earthFace = null; goStep(0); },
-    p: "38만 km, 빛으로 1.3초. 사람이 직접 가 본 가장 먼 곳이에요. 노화도의 <b>밀물과 썰물</b>을 만드는 것도 이 달입니다." },
-  { t: "태양과 이웃 행성", alt: 1.496e8, photo: "sun", go(){ goStep(1); },
-    p: "태양까지 1억 5천만 km. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 태양을 떠난 빛이에요." },
+  { t: "배 갑판 위에서", pv: true, alt: 0.004, altNote: "배 갑판", go(){
+      pvEnter(); PV.setBob(true);
+      PV.flyTo({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 }, 1500);
+      loadFerries();
+      const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000);
+      PV.note(timeChip() + (sunEl() < -4 && !PV.timeOffset ? "<br>지금 노화도는 밤이에요. 아래 <b>☀️ 낮 풍경으로</b>를 누르면 낮 바다를 볼 수 있어요." : "")); },
+    extra: () => [...dayBtn(), ["🗺️ 뱃길 지도", () => $("layer").classList.contains("show") ? closeLayers() : openMap("ships")]],
+    p: "땅끝에서 산양으로 가는 배 갑판 위예요. 눈앞에 다가오는 섬이 <b>노화도</b>, 오른쪽 너머로 보길도가 보여요. 하늘빛과 해·달의 자리는 <b>지금 이 시각 그대로</b>예요. 파란 배 표시는 지금 운항 중인 여객선이에요." },
+  { t: "갈매기 눈높이", pv: true, alt: 0.35, go(){
+      pvEnter(); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => PV.setDrift(0.8), 5000);
+      const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000); PV.note(timeChip()); },
+    extra: () => [...dayBtn()],
+    p: "갈매기처럼 조금만 날아오르면 섬들이 한눈에 들어와요. 노화도와 보길도, 소안도가 바다 위에 놓여 있고, 그 사이로 매일 배가 다녀요. 우리가 사는 곳은 <b>이만큼의 땅과 바다</b>예요." },
+  { t: "비행기 창가 자리", pv: true, alt: 10.5, go(){
+      pvEnter(); PV.flyTo({ lat: 34.40, lon: 126.40, alt: 10.5, az: 150, el: -11, fov: 70 }, 6000);
+      loadPvPlanes(); let k = 0;
+      const upd = () => { PV.setMarkers([...islandMarks(), ...pvPlaneMarks()]); if (++k % 15 === 0) loadPvPlanes(); }; upd(); pvTimer = setInterval(upd, 1000);
+      PV.note(timeChip() + "<br>✈️ 점은 지금 이 하늘을 실제로 날고 있는 비행기예요"); },
+    extra: () => [...dayBtn(), ["📡 레이더로 보기", () => $("layer").classList.contains("show") ? closeLayers() : openMap("planes")]],
+    p: "고도 10km, 여객기 창가 자리예요. 발아래로 노화도가 손톱만 해졌어요. 같은 하늘에 <b>지금 이 순간</b> 제주로, 상하이로, 마닐라로 가는 사람들이 떠 있어요." },
+  { t: "달을 올려다보다", pv: true, alt: 384400, altNote: "달까지", go(){
+      pvEnter(); const off = seeBody("moon", 35, 4.5); },
+    extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], jumpButton("moon"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
+    p: "하늘 높이 올라 고개를 들면, 38만 km 떨어진 <b>달</b>. 사람이 직접 걸어 본 가장 먼 곳이에요. 노화도 앞바다의 밀물과 썰물을 날마다 끌어당기는 것도 이 달이에요. 화면의 달은 지금 이 시각 실제 방향과 모양이에요." },
+  { t: "태양을 바라보다", pv: true, alt: 1.496e8, altNote: "태양까지", photo: "sun", photoLater: true, go(){
+      pvEnter(); PV.flyTo({ alt: 110 }, 2500); setTimeout(() => { if (CH[cur].t === "태양을 바라보다") seeBody("sun", 110, 10); }, 2600); },
+    extra: () => [jumpButton("sun"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
+    p: "공기 위로 올라서면 하늘은 낮에도 까맣고, 태양은 눈부신 흰 별이 돼요. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 저 태양을 떠난 빛이에요. (실제로는 절대 맨눈으로 보면 안 돼요)" },
+  { t: "우주정거장 창밖", pv: true, alt: 420, photo: "iss", photoLater: true, go(){
+      pvEnter(); PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 10, color: "#ffb347" }]);
+      const go2 = () => { const c = issCam(); if (!c) { PV.flyTo({ lat: 30, lon: 126.6, alt: 420, az: 20, el: -27, fov: 75 }, 5000); return; }
+        PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); return q ? { ...q } : null; }); }, 5100); };
+      loadISS().then(go2); PV.note(timeChip()); },
+    extra: () => [["📺 우주정거장 생중계", openISSLive]], live: true,
+    p: "땅에서 420km 위, 국제우주정거장 창밖이에요. 지금 이 순간 정거장이 실제로 지나는 자리에서 본 모습이에요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
+  { t: "멀어지는 지구", pv: true, alt: 384400, altNote: "지구에서", go(){
+      pvEnter(); PV.set({ lat: 30, lon: 126.6, alt: 1500, az: 0, el: -89.9, fov: 60 });
+      PV.flyTo({ lat: 30, lon: 126.6, alt: 380000, az: 0, el: -89.9, fov: 28 }, 11000);
+      PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 8, color: "#ffb347", maxAlt: 60000 }, { dir: "moon", kind: "ring", label: "달", r: 10, color: "#cfd8ea" }]); PV.note(""); },
+    p: "계속 멀어지면 바다도 섬도 나라도 하나로 이어진 <b>둥근 공</b>이 돼요. 달 거리쯤에서 지구는 팔을 뻗었을 때 엄지손톱보다 작아요. 국경선은 어디에도 보이지 않아요." },
   { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
   { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
@@ -535,9 +635,11 @@ const CH = [
     p: "지금 보이는 안드로메다의 빛은 <b>250만 년 전</b>에 출발했어요. 그 빛이 떠날 때 지구에는 아직 사람이 없었어요." },
   { t: "볼 수 있는 우주의 끝", alt: 4.65e10 * LY_KM, photo: "deep", go(){ goStep(12); },
     p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에만 <b>은하가 수천억 개</b> 있어요." },
-  { t: "다시 노화도로", face: true, alt: 0, altNote: "다시 집", photo: "earth", go(){ closeLayers(); showISS = false; window.earthFace = () => 126.6; follow = null; goTo("earth"); select(null); setTimeout(() => { follow = "earth"; }, 4000); },
-    p: () => { const kst = new Date(simMs + 9*3600000), hh = kst.getUTCHours();
-      return `그리고 다시 집으로. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. 오늘도 앞바다에는 배가 오가고, 달이 끌어당기는 대로 물이 들고 납니다.`; },
+  { t: "다시 배 위로", pv: true, alt: 0.004, altNote: "다시 배 갑판", go(){
+      pvEnter(); PV.setBob(true); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
+      PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); PV.note(timeChip()); },
+    p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours();
+      return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. 오늘도 앞바다에는 배가 오가고, 달은 바닷물을 끌어당기고, 사람들은 저마다의 하루를 살아요. 저 작은 점 위의, 바로 이곳에서요.`; },
     last: true }
 ];
 let cur = -1, liveTimer = null;
@@ -548,7 +650,7 @@ function show(i){
   $("stP").innerHTML = typeof c.p === "function" ? c.p() : c.p; $("stP").scrollTop = 0;
   $("stPrev").disabled = i === 0; $("stNext").textContent = c.last ? "처음으로 ↺" : "다음 ▶";
   const ex = $("stExtra"); ex.innerHTML = "";
-  for (const [label, fn] of c.extra || []){ const b = document.createElement("button"); b.textContent = label; b.onclick = fn; ex.appendChild(b); }
+  for (const [label, fn] of (typeof c.extra === "function" ? c.extra() : c.extra) || []){ const b = document.createElement("button"); b.textContent = label; b.onclick = fn; ex.appendChild(b); }
   if (c.photo){ const b = document.createElement("button"); b.id = "phBtn"; b.onclick = () => phOn ? hidePhoto() : showPhoto(c.photo); ex.insertBefore(b, ex.firstChild); }
   $("stDots").innerHTML = CH.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("");
   live(""); clearInterval(liveTimer);
@@ -563,6 +665,7 @@ function show(i){
   setAlt(c);
   if (!c.pbd) { $("pbd").classList.remove("show"); pbdOn = false; }
   if (!c.face) window.earthFace = null;
+  if (!c.pv) pvLeave(); else PV.note("");
   c.go();
   if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
   preloadPhoto(i + 1);
@@ -577,7 +680,7 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+function endStory(){ pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
 window.startStory = () => { document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
 // 자유 모드에서도 지구를 크게 보면 우주정거장이 보이도록

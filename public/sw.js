@@ -1,5 +1,5 @@
 // 창백한 푸른 점 — 앱 껍데기와 행성 사진은 저장해 두고, 실시간 자료(/api)는 늘 새로 받아요.
-const V = "pbd-v3";
+const V = "pbd-v4";
 const SHELL = ["/", "/index.html", "/story.js", "/manifest.webmanifest", "/icons/icon-192.png", "/favicon.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k))))); self.clients.claim(); });

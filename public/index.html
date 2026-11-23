@@ -911,6 +911,7 @@ document.getElementById("start").onclick = () => {
   setTimeout(() => { goStep(1); setTimeout(() => showToast("'더 멀리 ▶'를 누르면 한 단계씩 나가요"), 2200); }, 500);
 };
 </script>
+<script src="view.js"></script>
 <script src="story.js"></script>
 <script>
 if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));

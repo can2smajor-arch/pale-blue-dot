@@ -26,3 +26,8 @@
 - ESO / S. Brunier — 은하수 파노라마 eso0932a (CC BY 4.0)
 - NASA, ESA, CSA, STScI — 용골자리 성운 '우주 절벽' weic2205a (CC BY 4.0)
 - NASA, ESA, S. Beckwith (STScI), HUDF Team — 허블 울트라 딥 필드 heic0611b (CC BY 4.0)
+
+## 사람 눈높이 장면 (view.js)
+- 지구 낮·밤 사진: NASA Blue Marble / Black Marble (three-globe 예제 이미지), 구름: NASA Blue Marble 구름층, 별: three-globe 예제 밤하늘, 달 표면: NASA LRO (globe.gl 예제)
+- 노화도 둘레 섬 모양: southkorea-maps 2013 시군구 경계 해안선. 섬 높이는 실제 지형 자료가 아니라 섬 크기로 어림한 값
+- 해·달 위치: 간단한 천문 계산(오차 1° 안팎)
