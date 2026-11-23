@@ -109,11 +109,13 @@ async function shipsInner(env) {
 async function webcams(env, url) {
   if (!env.WINDY_KEY) return json({ ok: false, need: "WINDY_KEY", error: "웹캠 서비스 키가 아직 없어요" }, { status: 200 });
   // 세계 곳곳에서 고루: 한국, 일본, 동남아, 인도, 유럽, 아프리카, 미주, 오세아니아 (위도,경도,반경km)
-  const REGIONS = [["한국", "36.5,127.8,350"], ["일본", "35.6,139.7,400"], ["동남아", "13.7,100.5,800"], ["인도", "20.6,78.9,1500"],
-    ["유럽", "46.8,8.2,800"], ["아프리카", "-1.3,36.8,2500"], ["남미", "-22.9,-43.2,2000"], ["북미", "40.7,-74.0,1500"], ["오세아니아", "-33.9,151.2,1500"]];
-  const near = url.searchParams.get("near");
+  // Windy 무료 API의 근처 검색 반경은 최대 250km
+  const REGIONS = [["한국", "37.0,127.3,250"], ["일본", "35.6,139.7,250"], ["태국", "13.75,100.5,250"], ["인도", "19.1,72.9,250"],
+    ["이탈리아", "41.9,12.5,250"], ["아이슬란드", "64.1,-21.9,250"], ["남아공", "-33.9,18.4,250"], ["브라질", "-22.9,-43.2,250"],
+    ["미국 뉴욕", "40.7,-74.0,250"], ["하와이", "21.3,-157.8,250"], ["호주", "-33.9,151.2,250"], ["뉴질랜드", "-36.85,174.76,250"]];
+  const near = url.searchParams.get("near");   // "위도,경도,반경km(최대 250)"
   const list = near && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+$/.test(near) ? [["", near]] : REGIONS;
-  const per = list.length > 1 ? "3" : "24";
+  const per = list.length > 1 ? "2" : "24";
   const results = await Promise.all(list.map(async ([region, nb]) => {
     const q = new URLSearchParams({ limit: per, include: "images,location,player,urls", sortKey: "popularity", sortDirection: "desc", nearby: nb });
     try { const r = await getText("https://api.windy.com/webcams/api/v3/webcams?" + q, 8000, { "x-windy-api-key": env.WINDY_KEY });
@@ -189,8 +191,8 @@ async function routes(request) {
 async function diag(env) {
   const out = { time: new Date().toISOString(), hasAisKey: !!env.AISSTREAM_KEY, hasWindyKey: !!env.WINDY_KEY };
   if (env.WINDY_KEY) {
-    for (const [label, extra] of [["plain", {}], ["nearby", { nearby: "36.5,127.8,350" }]]) {
-      const q = new URLSearchParams({ limit: "3", include: "location", ...extra });
+    for (const [label, extra] of [["plain", {}], ["nearby", { nearby: "37.0,127.3,250" }]]) {
+      const q = new URLSearchParams({ limit: "3", include: "location", ...extra });   // 점검
       try { const r = await getText("https://api.windy.com/webcams/api/v3/webcams?" + q, 8000, { "x-windy-api-key": env.WINDY_KEY });
         let n = null; try { n = (JSON.parse(r.text).webcams || []).map(w => w.location && w.location.city); } catch {}
         out["windy_" + label] = { status: r.status, cities: n, body: n ? undefined : r.text.slice(0, 160) };
