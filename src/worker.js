@@ -25,7 +25,7 @@ async function cached(request, ctx, seconds, make) {
   const hit = await cache.match(key);
   if (hit) return hit;
   const res = await make();
-  if (res.status === 200) {
+  if (res.status === 200 && !res.headers.get("x-no-cache")) {
     const copy = new Response(res.body, res);
     copy.headers.set("cache-control", `public, max-age=${seconds}`);
     ctx.waitUntil(cache.put(key, copy.clone()));
@@ -125,18 +125,19 @@ async function planes(url) {
   const q = url.searchParams, lat = Number(q.get("lat") ?? 34.19), lon = Number(q.get("lon") ?? 126.57);
   const nm = Math.max(1, Math.min(250, Math.round(Number(q.get("nm")) || 80)));
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ ok: false, error: "위치 값이 잘못됐어요" }, { status: 400 });
-  let last = "";
+  const tried = [];
   for (const src of PLANE_SOURCES) {
     try {
       const r = await getText(src.url(lat.toFixed(2), lon.toFixed(2), nm));
-      if (!r.ok) { last = `${src.name} ${r.status}`; continue; }
+      if (!r.ok) { tried.push(`${src.name}: ${r.status} ${r.text.slice(0, 120).replace(/\s+/g, " ")}`); continue; }
       const d = JSON.parse(r.text);
       const ac = (d.ac || d.aircraft || []).filter(p => p && p.lat != null && p.lon != null)
         .map(p => Object.fromEntries(KEEP.filter(k => p[k] !== undefined).map(k => [k, p[k]])));
       return json({ ok: true, source: src.name, ac });
-    } catch (e) { last = `${src.name} 연결 실패`; }
+    } catch (e) { tried.push(`${src.name}: ${e.name === "AbortError" ? "시간 초과" : "연결 실패 " + (e.message || "")}`); }
   }
-  return json({ ok: false, error: `비행 데이터 서버 응답 없음 (${last})` }, { status: 502 });
+  // 화면이 이유를 보여 줄 수 있도록 200으로 돌려주되 ok:false (캐시는 안 함)
+  const fail = json({ ok: false, error: "비행 데이터 서버가 응답하지 않았어요", tried }); fail.headers.set("x-no-cache", "1"); return fail;
 }
 // 편명으로 출발·도착 공항 추정 (adsb.lol routeset)
 async function routes(request) {
