@@ -1,0 +1,12 @@
+{
+  // 창백한 푸른 점 — Cloudflare Workers 설정
+  "name": "pale-blue-dot",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}
