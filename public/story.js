@@ -55,6 +55,8 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 .radar.on{display:block}
 @keyframes sweep{to{transform:rotate(360deg)}}
 .plane-glow svg{filter:drop-shadow(0 0 4px currentColor)}
+#story .st-p .tw{opacity:0;animation:tw .01s linear forwards}
+@keyframes tw{to{opacity:1}}
 #mile{position:fixed;left:0;right:0;top:27%;z-index:4;text-align:center;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
 #mile.on{opacity:1;transform:none}
 #mile b{display:block;font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;text-shadow:0 2px 12px #000c}
@@ -613,7 +615,7 @@ const CH = [
       PV.flyTo({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 }, 1500);
       loadFerries();
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000);
-      PV.note(timeChip() + (sunEl() < -4 && !PV.timeOffset ? "<br>지금 노화도는 밤이에요. 아래 <b>☀️ 낮 풍경으로</b>를 누르면 낮 바다를 볼 수 있어요." : "")); },
+      PV.note(timeChip() + (PV.timeOffset ? "<br>지금 노화도는 밤이라 낮 풍경으로 옮겨 왔어요. <b>🕐 지금 시각으로</b>를 누르면 지금의 밤바다를 볼 수 있어요." : "")); },
     extra: () => [...dayBtn(), ["🗺️ 뱃길 지도", () => $("layer").classList.contains("show") ? closeLayers() : openMap("ships")]],
     p: "땅끝에서 산양으로 가는 배 갑판. 당신 눈높이는 바다 위 <b>4m</b>예요. 여기서 보이는 수평선까지는 고작 7km. 사람은 평생 대부분을 이 높이에서 살아요.<br><br>자, 이제 올라가 볼까요? 하늘빛과 해의 자리는 <b>지금 이 시각 그대로</b>예요." },
   { t: "갈매기 눈높이", pv: true, alt: 0.35, liveAlt: "바다 위", go(){
@@ -643,12 +645,18 @@ const CH = [
       loadISS().then(go2); PV.note(timeChip()); },
     extra: () => [["📺 우주정거장 생중계", openISSLive]], live: true,
     p: "땅에서 420km 위, 국제우주정거장 창밖이에요. 지금 이 순간 정거장이 실제로 지나는 자리에서 본 모습이에요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
-  { t: "멀어지는 지구", pv: true, alt: 384400, liveAlt: "지구에서", go(){
+  { t: "멀어지는 지구", pv: true, alt: 30000, liveAlt: "지구에서", go(){
       PV.setPatch(34, 127);
       pvEnter(); PV.set({ lat: 30, lon: 126.6, alt: 1500, az: 0, el: -89.9, fov: 60 });
-      PV.flyTo({ lat: 30, lon: 126.6, alt: 380000, az: 0, el: -89.9, fov: 28 }, 16000);
+      PV.flyTo({ lat: 30, lon: 126.6, alt: 30000, az: 0, el: -89.9, fov: 44 }, 12000);
       PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 8, color: "#ffb347", maxAlt: 60000 }, { dir: "moon", kind: "ring", label: "달", r: 10, color: "#cfd8ea" }]); PV.note(""); },
+    extra: () => [["🌙 달 거리까지 더 멀리", () => PV.flyTo({ alt: 380000, fov: 28 }, 12000)], ["🌍 다시 가까이", () => PV.flyTo({ alt: 30000, fov: 44 }, 8000)]],
     p: "한반도 위의 구름은 <b>어제 위성이 실제로 찍은 구름</b>이에요. 멀어질수록 바다도 섬도 나라도 하나의 <b>둥근 공</b>이 돼요. 달 거리에서 지구는 팔을 뻗은 엄지손톱보다 작아요. 국경선은 어디에도 없어요." },
+  { t: "달리는 태양계", hx: true, alt: 4.5e9, altNote: "태양계 바깥에서", go(){
+      closeLayers(); hidePhoto(); HX.show(); const t0 = Date.now(); clearInterval(hxTimer);
+      const upd = () => { const sec = (Date.now() - t0) / 1000; live(`이 장면을 보는 <b>${sec.toFixed(0)}초</b> 동안 당신은 우주에서 <b>${Math.round(sec * 230).toLocaleString()}km</b>를 움직였어요<br><small>태양이 은하를 도는 빠르기 초속 약 230km · 은하 한 바퀴에 약 2억 3천만 년</small>`); };
+      upd(); hxTimer = setInterval(upd, 200); },
+    p: "가만히 앉아 있다고 생각했죠? 태양은 초속 230km로 은하를 돌고, 행성들은 그 둘레를 돌며 따라가요. 그래서 지구가 우주에 그리는 길은 동그라미가 아니라 <b>끝없는 나선</b>이에요. 당신은 태어나서 단 한 번도 같은 자리에 있었던 적이 없어요." },
   { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
   { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
@@ -671,12 +679,20 @@ const CH = [
       return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. ${journeyStats()}<br><br>그 모든 일이 저 작은 점 위에서, 바로 이곳에서 일어났어요.`; },
     last: true }
 ];
-let cur = -1, liveTimer = null;
+let cur = -1, liveTimer = null, hxTimer = null;
+// 자막을 한 글자씩 찍기
+function typeOut(el){
+  let n = 0; const walk = node => { for (const ch of [...node.childNodes]){
+    if (ch.nodeType === 3){ const f = document.createDocumentFragment(); for (const c of ch.textContent){ const sp = document.createElement("span"); sp.className = "tw"; sp.textContent = c; sp.style.animationDelay = (n++ * 22) + "ms"; f.appendChild(sp); } node.replaceChild(f, ch); }
+    else if (ch.nodeType === 1 && ch.tagName !== "BR") walk(ch); else n += 6; } };
+  walk(el);
+  el.onclick = () => el.querySelectorAll(".tw").forEach(x => { x.style.animation = "none"; x.style.opacity = 1; });
+}
 function live(html){ const el = $("stLive"); el.innerHTML = html; el.classList.toggle("show", !!html); }
 function show(i){
   i = Math.max(0, Math.min(CH.length - 1, i)); cur = i; const c = CH[i];
   $("stT").textContent = `${i + 1} / ${CH.length} · ${c.t}`;
-  $("stP").innerHTML = typeof c.p === "function" ? c.p() : c.p; $("stP").scrollTop = 0;
+  $("stP").innerHTML = typeof c.p === "function" ? c.p() : c.p; $("stP").scrollTop = 0; typeOut($("stP"));
   $("stPrev").disabled = i === 0; $("stNext").textContent = c.last ? "처음으로 ↺" : "다음 ▶";
   const ex = $("stExtra"); ex.innerHTML = "";
   for (const [label, fn] of (typeof c.extra === "function" ? c.extra() : c.extra) || []){ const b = document.createElement("button"); b.textContent = label; b.onclick = fn; ex.appendChild(b); }
@@ -695,6 +711,7 @@ function show(i){
   if (!c.pbd) { $("pbd").classList.remove("show"); pbdOn = false; }
   if (!c.face) window.earthFace = null;
   if (!c.pv) pvLeave(); else PV.note("");
+  if (!c.hx){ clearInterval(hxTimer); if (window.HX) HX.hide(); }
   c.go();
   if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
   preloadPhoto(i + 1);
@@ -709,9 +726,11 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+function endStory(){ clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
-window.startStory = () => { storyT0 = Date.now(); document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
+window.startStory = () => { storyT0 = Date.now();
+  // 밤에 열면 첫인상이 캄캄해서, 낮 풍경으로 시작하고 버튼으로 지금 시각(밤)을 볼 수 있게 함
+  try { if (window.PV && !PV.timeOffset && sunEl() < 3){ const off = findTime(ms => { const b = bodyAzel(HERE, "sun", ms); return b.el > 18 && b.el < 32 && b.az > 180; }); if (off != null) PV.setTimeOffset(off); } } catch (e) {} document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
 // 자유 모드에서도 지구를 크게 보면 우주정거장이 보이도록
 showISS = true; loadISS();
 })();
