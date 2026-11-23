@@ -130,30 +130,118 @@ async function openMap(mode = "ships"){
   }
   setTimeout(() => map.invalidateSize(), 50);
   clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); shipLayer.clearLayers(); planeLayer.clearLayers();
-  if (mode === "ships"){ map.setView([NOHWA.lat - 0.04, NOHWA.lon], 10); loadShips(); shipTimer = setInterval(loadShips, 60000); }
-  else { map.setView([NOHWA.lat, NOHWA.lon], 7); loadPlanes(); planeTimer = setInterval(loadPlanes, 20000); planeAnim = setInterval(movePlanes, 1000); }
+  if (ferryLayer) ferryLayer.clearLayers();
+  if (mode === "ships"){ map.setView([34.2, 126.575], 11); drawFerryBase(); ferryNote = "⛴️ 여객선 운항 정보를 불러오는 중…"; aisNote = ""; renderSeaNote();
+    loadFerries(); loadShips(); clearInterval(ferryTimer); ferryTimer = setInterval(updateFerries, 5000); shipTimer = setInterval(() => { loadShips(); loadFerries(); }, 60000); }
+  else { clearInterval(ferryTimer); map.setView([NOHWA.lat, NOHWA.lon], 7); loadPlanes(); planeTimer = setInterval(loadPlanes, 20000); planeAnim = setInterval(movePlanes, 1000); }
 }
 async function loadShips(){
-  const note = $("mapNote");
-  note.className = "show"; note.textContent = "🚢 지금 이 바다의 배 신호를 모으는 중… (7초쯤 걸려요)";
-  let d; try { d = await (await fetch("/api/ships")).json(); } catch (e) { d = { ok: false, error: "연결 실패" }; }
+  let d; try { d = await (await fetch("/api/ships")).json(); } catch (e) { d = { ok: false }; }
+  if (mapMode !== "ships") return;
   shipLayer.clearLayers();
-  if (!d.ok){
-    note.innerHTML = d.need ? "🚢 배 위치는 <b>선박위치 서비스 키</b>를 넣으면 나와요. 지금은 지도만 보여 드려요." : `🚢 배 정보를 받지 못했어요 (${d.error || "오류"}). 1분 뒤 다시 시도해요.`;
-    return;
-  }
+  if (!d.ok || !d.ships || !d.ships.length){ aisNote = ""; renderSeaNote(); return; }
   for (const s of d.ships){
     const ang = s.heading != null && s.heading < 360 ? s.heading : (s.cog || 0), moving = (s.sog || 0) > 0.5, col = SHIP_COL(s.type);
-    const svg = moving ? `<svg width="22" height="22" viewBox="-11 -11 22 22" style="transform:rotate(${ang}deg)"><path d="M0,-9 L5,7 L0,4 L-5,7 Z" fill="${col}" stroke="#000" stroke-width="1"/></svg>`
-                       : `<svg width="14" height="14" viewBox="-7 -7 14 14"><circle r="4.5" fill="${col}" stroke="#000" stroke-width="1"/></svg>`;
+    const svg = moving ? `<svg width="22" height="22" viewBox="-11 -11 22 22" style="transform:rotate(${ang}deg)"><path d="M0,-9 L5,7 L0,4 L-5,7 Z" fill="${col}" stroke="#fff" stroke-width="1.2"/></svg>`
+                       : `<svg width="14" height="14" viewBox="-7 -7 14 14"><circle r="4.5" fill="${col}" stroke="#fff" stroke-width="1.2"/></svg>`;
     const icon = L.divIcon({ html: svg, className: "ship-ico", iconSize: moving ? [22, 22] : [14, 14], iconAnchor: moving ? [11, 11] : [7, 7] });
     const kmh = s.sog != null ? (s.sog * 1.852).toFixed(0) : "-";
     L.marker([s.lat, s.lon], { icon }).addTo(shipLayer).bindPopup(
-      `<b>${s.name || "이름 없음"}</b><br>${SHIP_TYPE(s.type)}${s.len ? ` · 길이 ${s.len}m` : ""}<br>속도 ${moving ? kmh + "km/h" : "정박·정지"}${s.dest ? `<br>목적지 ${s.dest}` : ""}`);
+      `<b>${s.name || "이름 없음"}</b> (실제 신호)<br>${SHIP_TYPE(s.type)}${s.len ? ` · 길이 ${s.len}m` : ""}<br>속도 ${moving ? kmh + "km/h" : "정박·정지"}${s.dest ? `<br>목적지 ${s.dest}` : ""}`);
   }
-  note.innerHTML = d.ships.length ? `🚢 지금 이 바다에서 신호를 보낸 배 <b>${d.ships.length}척</b> · 배를 누르면 이름과 속도가 나와요<br><small>파랑 여객선 · 초록 화물선 · 노랑 어선 · 주황 유조선 / 출처: aisstream.io</small>`
-                                  : "🚢 방금 7초 동안은 이 바다에서 잡힌 배 신호가 없었어요. 1분마다 다시 확인해요.";
+  aisNote = `📡 실제 위치 신호가 잡힌 배 <b>${d.ships.length}척</b> (흰 테두리)`; renderSeaNote();
 }
+
+
+// ───────── 노화도 둘레 여객선 (시간표로 계산한 추정 위치) ─────────
+// 항구 좌표는 통계청 해안선 위에서 확인한 대략값, 소요 시간도 대략값이에요.
+const PORTS = { "땅끝": [34.2945, 126.528], "산양": [34.2295, 126.565], "동천": [34.191, 126.621], "이목": [34.177, 126.563], "넙도": [34.197, 126.496],
+  "서넙도": [34.19, 126.474], "횡간": [34.274, 126.565], "당사": [34.112, 126.603], "소안": [34.165, 126.645], "화흥포": [34.296, 126.677] };
+const P = n => PORTS[n];
+const PATHS = {   // 섬을 피해 가는 꺾임점
+  "땅끝-산양": [P("땅끝"), [34.265, 126.535], P("산양")], "땅끝-넙도": [P("땅끝"), [34.25, 126.505], P("넙도")], "넙도-서넙도": [P("넙도"), P("서넙도")],
+  "산양-횡간": [P("산양"), P("횡간")], "화흥포-동천": [P("화흥포"), [34.24, 126.65], P("동천")], "동천-소안": [P("동천"), [34.178, 126.633], P("소안")],
+  "이목-넙도": [P("이목"), [34.181, 126.545], [34.187, 126.53], P("넙도")], "이목-당사": [P("이목"), [34.171, 126.60], [34.162, 126.628], [34.14, 126.626], P("당사")]
+};
+const LEG_MIN = { "땅끝-산양": 30, "땅끝-넙도": 50, "넙도-서넙도": 15, "산양-횡간": 20, "화흥포-동천": 35, "동천-소안": 15, "이목-넙도": 30, "이목-당사": 45 };
+// 항로 이름 → 출발 항구별 들르는 순서
+const ITIN = {
+  "땅끝산양": { "땅끝": ["땅끝", "산양"], "산양": ["산양", "땅끝"] },
+  "땅끝넙도": { "땅끝": ["땅끝", "넙도"], "넙도": ["넙도", "땅끝"] },
+  "땅끝넙도-서넙도": { "땅끝": ["땅끝", "넙도", "서넙도", "넙도", "땅끝"] },
+  "산양횡간": { "산양": ["산양", "횡간"], "횡간": ["횡간", "산양"], "땅끝": ["땅끝", "산양", "횡간"] },
+  "화흥포동천-소안": { "화흥포": ["화흥포", "동천", "소안"], "소안": ["소안", "동천", "화흥포"], "동천": ["동천", "소안"] },
+  "이목서넙도(순환)": { "이목": ["이목", "넙도", "서넙도", "넙도", "이목"] },
+  "이목넙도(순환)": { "이목": ["이목", "넙도", "이목"] },
+  "이목당사": { "이목": ["이목", "당사"], "당사": ["당사", "이목"] }
+};
+const DWELL = 5;   // 들르는 항구에서 머무는 시간(분)
+function legPath(a, b){ const k = `${a}-${b}`, r = `${b}-${a}`; return PATHS[k] ? { pts: PATHS[k], min: LEG_MIN[k] } : PATHS[r] ? { pts: PATHS[r].slice().reverse(), min: LEG_MIN[r] } : null; }
+function alongPath(pts, f){
+  const seg = []; let total = 0;
+  for (let i = 1; i < pts.length; i++){ const d = Math.hypot(pts[i][0] - pts[i-1][0], (pts[i][1] - pts[i-1][1]) * 0.83); seg.push(d); total += d; }
+  let want = f * total;
+  for (let i = 0; i < seg.length; i++){ if (want <= seg[i]){ const g = seg[i] ? want / seg[i] : 0, a = pts[i], b = pts[i+1];
+      return { lat: a[0] + (b[0] - a[0]) * g, lon: a[1] + (b[1] - a[1]) * g, heading: Math.atan2((b[1] - a[1]) * 0.83, b[0] - a[0]) * 180 / Math.PI }; } want -= seg[i]; }
+  const e = pts[pts.length - 1]; return { lat: e[0], lon: e[1], heading: 0 };
+}
+// 출발 시각에서 몇 분 지났는지로 지금 위치 계산
+function ferryNow(item, nowMin){
+  const stops = (ITIN[item.route] || {})[item.from]; if (!stops) return null;
+  const dep = parseInt(item.t.slice(0, 2)) * 60 + parseInt(item.t.slice(2));
+  let tcur = dep;
+  for (let i = 0; i < stops.length - 1; i++){
+    const lp = legPath(stops[i], stops[i+1]); if (!lp) return null;
+    if (nowMin < tcur) return null;
+    if (nowMin <= tcur + lp.min){ const at = alongPath(lp.pts, (nowMin - tcur) / lp.min);
+      return { ...at, from: stops[i], to: stops[i+1], arrive: tcur + lp.min, last: stops[stops.length - 1] }; }
+    tcur += lp.min;
+    if (i < stops.length - 2){ if (nowMin <= tcur + DWELL){ const p = P(stops[i+1]); return { lat: p[0], lon: p[1], heading: 0, docked: stops[i+1], arrive: tcur, last: stops[stops.length - 1] }; } tcur += DWELL; }
+  }
+  return null;
+}
+let ferryData = null, ferryLayer = null, ferryMarks = [], ferryTimer = null;
+const hhmm = m => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const kstMin = () => { const d = new Date(Date.now() + 9 * 3600000); return d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60; };
+function drawFerryBase(){
+  if (!ferryLayer) ferryLayer = L.layerGroup().addTo(map);
+  ferryLayer.clearLayers(); ferryMarks = [];
+  for (const pts of Object.values(PATHS)) L.polyline(pts, { color: "#4fc3ff", weight: 2, opacity: 0.45, dashArray: "4 6" }).addTo(ferryLayer);
+  for (const [n, [la, lo]] of Object.entries(PORTS))
+    L.circleMarker([la, lo], { radius: 3.5, color: "#0b1020", weight: 1, fillColor: "#ffffff", fillOpacity: 1 }).addTo(ferryLayer).bindTooltip(n, { direction: "top", offset: [0, -4], className: "" });
+}
+async function loadFerries(){
+  try { const d = await (await fetch("/api/ferries")).json(); if (d.ok) ferryData = d; } catch (e) {}
+  updateFerries();
+}
+function updateFerries(){
+  if (mapMode !== "ships" || !ferryLayer) return;
+  for (const m of ferryMarks) ferryLayer.removeLayer(m); ferryMarks = [];
+  if (!ferryData) return;
+  const now = kstMin(); let moving = 0;
+  const cancelled = ferryData.items.filter(x => /비운|통제|결항/.test(x.se));
+  for (const it of ferryData.items){
+    if (/비운|통제|결항/.test(it.se)) continue;
+    const at = ferryNow(it, now); if (!at) continue;
+    moving++;
+    const svg = at.docked ? `<svg width="16" height="16" viewBox="-8 -8 16 16"><circle r="5.5" fill="#4fc3ff" stroke="#000" stroke-width="1"/></svg>`
+      : `<svg width="26" height="26" viewBox="-13 -13 26 26" style="transform:rotate(${at.heading}deg)"><path d="M0,-11 L6,4 L4,10 L-4,10 L-6,4 Z" fill="#4fc3ff" stroke="#000" stroke-width="1.2"/></svg>`;
+    const m = L.marker([at.lat, at.lon], { icon: L.divIcon({ html: svg, className: "ship-ico", iconSize: at.docked ? [16, 16] : [26, 26], iconAnchor: at.docked ? [8, 8] : [13, 13] }) })
+      .bindPopup(`<b>${it.ship}</b> (여객선)<br>${it.route} · ${it.t.slice(0, 2)}:${it.t.slice(2)} ${it.from} 출발<br>` +
+        (at.docked ? `지금 ${at.docked}에 잠시 정박 중` : `${at.from} → ${at.to} · ${hhmm(Math.round(at.arrive))}쯤 도착`) +
+        `<br><small>시간표로 계산한 추정 위치예요</small>`).addTo(ferryLayer);
+    ferryMarks.push(m);
+  }
+  const next = ferryData.items.filter(x => !/비운|통제|결항/.test(x.se) && ITIN[x.route] && ITIN[x.route][x.from])
+    .map(x => ({ x, m: parseInt(x.t.slice(0, 2)) * 60 + parseInt(x.t.slice(2)) })).filter(o => o.m > now && o.m - now <= 90).slice(0, 3);
+  ferryNote = (moving ? `⛴️ 지금 노화도 둘레 바다를 지나는 여객선 <b>${moving}척</b> (시간표로 계산한 추정 위치)` : `⛴️ 지금은 바다 위에 있는 여객선이 없어요`) +
+    (next.length ? `<br>곧 출발: ${next.map(o => `${o.x.t.slice(0, 2)}:${o.x.t.slice(2)} ${o.x.from}→ ${o.x.ship}`).join(" · ")}` : (moving ? "" : (now > 21 * 60 ? "<br>오늘 운항은 모두 끝났어요" : ""))) +
+    (cancelled.length ? `<br><span style="color:#ffb347">오늘 결항·통제 ${cancelled.length}편</span>` : "");
+  renderSeaNote();
+}
+let ferryNote = "", aisNote = "";
+function renderSeaNote(){ const n = $("mapNote"); if (mapMode !== "ships") return; n.className = "show";
+  n.innerHTML = [ferryNote, aisNote].filter(Boolean).join("<br>") + `<br><small>출처: 한국해양교통안전공단 운항정보(완도뱃길 허브)${aisNote ? " · aisstream.io" : ""}</small>`; }
 
 const AIRLINES = {
   KAL:"대한항공",AAR:"아시아나항공",JJA:"제주항공",TWB:"티웨이항공",JNA:"진에어",ABL:"에어부산",ASV:"에어서울",
@@ -250,7 +338,7 @@ function movePlanes(){
 
 // ───────── 세계의 창 (실시간 카메라) ─────────
 async function openCams(){
-  clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null;
+  clearInterval(ferryTimer); clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null;
   $("layer").classList.add("show"); $("map").style.display = "none"; $("mapNote").className = ""; const box = $("cams"); box.classList.add("show");
   box.innerHTML = `<div class="empty2">🌍 세계 곳곳의 카메라를 불러오는 중…</div>`;
   let d; try { d = await (await fetch("/api/webcams")).json(); } catch (e) { d = { ok: false, error: "연결 실패" }; }
@@ -273,7 +361,7 @@ function openISSLive(){
   openModal(`<iframe src="https://www.youtube.com/embed/live_stream?channel=UCLA_DiR1FfKNvjuUpBHmylQ&autoplay=1&mute=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`,
     `NASA 공식 생중계 (유튜브) · 화면이 안 나오면 <a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">NASA 생중계 목록</a>에서 'Live Video from the International Space Station'을 고르세요`);
 }
-function closeLayers(){ $("layer").classList.remove("show"); $("cams").classList.remove("show"); clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null; $("pbd").classList.remove("show"); pbdOn = false; }
+function closeLayers(){ clearInterval(ferryTimer); $("layer").classList.remove("show"); $("cams").classList.remove("show"); clearInterval(shipTimer); clearInterval(planeTimer); clearInterval(planeAnim); mapMode = null; $("pbd").classList.remove("show"); pbdOn = false; }
 
 // ───────── 창백한 푸른 점 장면 ─────────
 let pbdOn = false, pbdT0 = 0;
@@ -316,7 +404,7 @@ function drawPBD(now){
 const fmtLyOrKm = au => fmtDist(au);
 const CH = [
   { t: "노화도 앞바다", layer: true, go(){ openMap("ships"); },
-    p: "출발은 노화도 앞바다예요. 지금 이 순간에도 여객선과 화물선, 고깃배가 이 바다를 오가요. 지도 위의 배는 <b>지금 실제로 위치 신호를 보내고 있는 배</b>들이에요." },
+    p: "출발은 노화도 앞바다예요. 땅끝과 산양, 화흥포와 동천, 이목과 넙도·당사를 잇는 뱃길로 <b>오늘도 여객선이 오가요</b>. 지도 위 파란 배는 오늘 운항표를 바탕으로 계산한 지금 위치예요." },
   { t: "세계의 창", layer: true, go(){ openCams(); },
     p: "같은 시각, 지구 어딘가는 한밤이고 어딘가는 막 해가 뜨고 있어요. 세계 곳곳에 공개된 카메라로 <b>지금 그곳</b>을 들여다봐요." },
   { t: "노화도 하늘의 비행기", layer: true, go(){ openMap("planes"); },

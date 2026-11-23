@@ -3,6 +3,7 @@
 //   GET /api/iss      우주정거장 궤도 데이터 (CelesTrak, 키 필요 없음)
 //   GET /api/planes   노화도 하늘의 비행기 (adsb.lol / adsb.fi, 키 필요 없음)
 //   POST /api/routes  편명으로 출발·도착 공항 추정
+//   GET /api/ferries  노화도 둘레 여객선 오늘 운항 (완도뱃길 허브)
 //   GET /api/ships    노화도 앞바다의 배 (aisstream.io, 비밀값 AISSTREAM_KEY 필요)
 //   GET /api/webcams  세계 실시간 카메라 (Windy Webcams, 비밀값 WINDY_KEY 필요)
 // 비밀값은 Cloudflare 대시보드 → 이 Worker → Settings → Variables and Secrets 에 넣습니다. 코드에는 넣지 않습니다.
@@ -218,6 +219,22 @@ async function diag(env) {
   return json(out);
 }
 
+
+// ── 노화도 둘레 여객선 오늘 운항 (완도뱃길 허브 자료를 그대로 이어받음 · 키 필요 없음) ──
+const FERRY_HUB = "https://wandoferry.kr/api/komsa";
+const NOHWA_ROUTES = /땅끝산양|땅끝넙도|산양횡간|화흥포동천|이목/;
+async function ferries() {
+  try {
+    const r = await getText(FERRY_HUB, 8000);
+    const d = JSON.parse(r.text);
+    if (!d.ok || !Array.isArray(d.items)) throw new Error(d.error || "허브 형식 다름");
+    const items = d.items.filter(x => NOHWA_ROUTES.test(x.route || "")).map(x => ({ t: x.t, ship: x.ship, from: x.from, route: x.route, se: x.se, stts: x.stts, reason: x.reason }));
+    return json({ ok: true, date: d.date, fetched: d.fetched, source: "한국해양교통안전공단 (완도뱃길 허브)", items });
+  } catch (e) {
+    const res = json({ ok: false, error: "여객선 운항 정보를 받지 못했어요", detail: String(e.message || e).slice(0, 120) }); res.headers.set("x-no-cache", "1"); return res;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -225,6 +242,7 @@ export default {
     if (url.pathname === "/api/diag") return diag(env);
     if (url.pathname === "/api/planes") return cached(request, ctx, 15, () => planes(url));
     if (url.pathname === "/api/routes" && request.method === "POST") return routes(request);
+    if (url.pathname === "/api/ferries") return cached(request, ctx, 300, ferries);
     if (url.pathname === "/api/ships") return cached(request, ctx, 60, () => ships(env));
     if (url.pathname === "/api/webcams") return cached(request, ctx, 300, () => webcams(env, url));
     if (url.pathname.startsWith("/api/")) return json({ ok: false, error: "없는 주소" }, { status: 404 });
