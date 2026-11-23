@@ -1,6 +1,8 @@
 // 창백한 푸른 점 — Cloudflare Worker
 // 화면 파일(public/)은 Cloudflare가 바로 내보내고, /api/* 만 이 코드가 처리합니다.
 //   GET /api/iss      우주정거장 궤도 데이터 (CelesTrak, 키 필요 없음)
+//   GET /api/planes   노화도 하늘의 비행기 (adsb.lol / adsb.fi, 키 필요 없음)
+//   POST /api/routes  편명으로 출발·도착 공항 추정
 //   GET /api/ships    노화도 앞바다의 배 (aisstream.io, 비밀값 AISSTREAM_KEY 필요)
 //   GET /api/webcams  세계 실시간 카메라 (Windy Webcams, 비밀값 WINDY_KEY 필요)
 // 비밀값은 Cloudflare 대시보드 → 이 Worker → Settings → Variables and Secrets 에 넣습니다. 코드에는 넣지 않습니다.
@@ -112,10 +114,54 @@ async function webcams(env, url) {
   return json({ ok: true, source: "Windy Webcams", cams });
 }
 
+
+// ── 노화도 하늘의 비행기 (adsb.lol, 안 되면 adsb.fi · 키 필요 없음) ──
+const PLANE_SOURCES = [
+  { name: "adsb.lol", url: (la, lo, nm) => `https://api.adsb.lol/v2/lat/${la}/lon/${lo}/dist/${nm}` },
+  { name: "adsb.fi",  url: (la, lo, nm) => `https://opendata.adsb.fi/api/v2/lat/${la}/lon/${lo}/dist/${nm}` }
+];
+const KEEP = ["hex", "flight", "r", "t", "alt_baro", "alt_geom", "gs", "track", "lat", "lon", "seen_pos"];
+async function planes(url) {
+  const q = url.searchParams, lat = Number(q.get("lat") ?? 34.19), lon = Number(q.get("lon") ?? 126.57);
+  const nm = Math.max(1, Math.min(250, Math.round(Number(q.get("nm")) || 80)));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ ok: false, error: "위치 값이 잘못됐어요" }, { status: 400 });
+  let last = "";
+  for (const src of PLANE_SOURCES) {
+    try {
+      const r = await getText(src.url(lat.toFixed(2), lon.toFixed(2), nm));
+      if (!r.ok) { last = `${src.name} ${r.status}`; continue; }
+      const d = JSON.parse(r.text);
+      const ac = (d.ac || d.aircraft || []).filter(p => p && p.lat != null && p.lon != null)
+        .map(p => Object.fromEntries(KEEP.filter(k => p[k] !== undefined).map(k => [k, p[k]])));
+      return json({ ok: true, source: src.name, ac });
+    } catch (e) { last = `${src.name} 연결 실패`; }
+  }
+  return json({ ok: false, error: `비행 데이터 서버 응답 없음 (${last})` }, { status: 502 });
+}
+// 편명으로 출발·도착 공항 추정 (adsb.lol routeset)
+async function routes(request) {
+  let body; try { body = await request.json(); } catch { return json([], { status: 400 }); }
+  const list = (Array.isArray(body && body.planes) ? body.planes : [])
+    .filter(p => p && typeof p.callsign === "string" && /^[A-Z0-9]{2,8}$/.test(p.callsign.trim()) && Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    .slice(0, 60).map(p => ({ callsign: p.callsign.trim(), lat: p.lat, lng: p.lng }));
+  if (!list.length) return json([]);
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch("https://api.adsb.lol/api/0/routeset", { method: "POST", signal: ctl.signal,
+      headers: { "content-type": "application/json", "user-agent": UA }, body: JSON.stringify({ planes: list }) });
+    clearTimeout(t);
+    if (!r.ok) return json([]);
+    let d = await r.json(); if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = []; } }
+    return json(Array.isArray(d) ? d : []);
+  } catch { return json([]); }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/iss") return cached(request, ctx, 3 * 3600, iss);
+    if (url.pathname === "/api/planes") return cached(request, ctx, 15, () => planes(url));
+    if (url.pathname === "/api/routes" && request.method === "POST") return routes(request);
     if (url.pathname === "/api/ships") return cached(request, ctx, 60, () => ships(env));
     if (url.pathname === "/api/webcams") return cached(request, ctx, 300, () => webcams(env, url));
     if (url.pathname.startsWith("/api/")) return json({ ok: false, error: "없는 주소" }, { status: 404 });
