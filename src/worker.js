@@ -117,9 +117,18 @@ async function webcams(env, url) {
 
 // ── 노화도 하늘의 비행기 (adsb.lol, 안 되면 adsb.fi · 키 필요 없음) ──
 const PLANE_SOURCES = [
+  { name: "airplanes.live", url: (la, lo, nm) => `https://api.airplanes.live/v2/point/${la}/${lo}/${nm}` },
   { name: "adsb.lol", url: (la, lo, nm) => `https://api.adsb.lol/v2/lat/${la}/lon/${lo}/dist/${nm}` },
+  { name: "OpenSky", opensky: true, url: (la, lo, nm) => { const d = nm * 1.852 / 111, e = d / Math.cos(la * Math.PI / 180);
+      return `https://opensky-network.org/api/states/all?lamin=${(la - d).toFixed(2)}&lamax=${(+la + d).toFixed(2)}&lomin=${(lo - e).toFixed(2)}&lomax=${(+lo + e).toFixed(2)}`; } },
   { name: "adsb.fi",  url: (la, lo, nm) => `https://opendata.adsb.fi/api/v2/lat/${la}/lon/${lo}/dist/${nm}` }
 ];
+// OpenSky 형식을 다른 서비스와 같은 모양으로 바꾸기
+function fromOpenSky(d){
+  return (d.states || []).filter(x => x[5] != null && x[6] != null).map(x => ({
+    hex: x[0], flight: x[1] || "", lon: x[5], lat: x[6], alt_baro: x[8] ? "ground" : (x[7] != null ? Math.round(x[7] / 0.3048) : undefined),
+    gs: x[9] != null ? x[9] / 0.514444 : undefined, track: x[10] != null ? x[10] : undefined, seen_pos: x[3] ? Math.max(0, d.time - x[3]) : 0 }));
+}
 const KEEP = ["hex", "flight", "r", "t", "alt_baro", "alt_geom", "gs", "track", "lat", "lon", "seen_pos"];
 async function planes(url) {
   const q = url.searchParams, lat = Number(q.get("lat") ?? 34.19), lon = Number(q.get("lon") ?? 126.57);
@@ -131,7 +140,7 @@ async function planes(url) {
       const r = await getText(src.url(lat.toFixed(2), lon.toFixed(2), nm));
       if (!r.ok) { tried.push(`${src.name}: ${r.status} ${r.text.slice(0, 120).replace(/\s+/g, " ")}`); continue; }
       const d = JSON.parse(r.text);
-      const ac = (d.ac || d.aircraft || []).filter(p => p && p.lat != null && p.lon != null)
+      const ac = (src.opensky ? fromOpenSky(d) : (d.ac || d.aircraft || [])).filter(p => p && p.lat != null && p.lon != null)
         .map(p => Object.fromEntries(KEEP.filter(k => p[k] !== undefined).map(k => [k, p[k]])));
       return json({ ok: true, source: src.name, ac });
     } catch (e) { tried.push(`${src.name}: ${e.name === "AbortError" ? "시간 초과" : "연결 실패 " + (e.message || "")}`); }

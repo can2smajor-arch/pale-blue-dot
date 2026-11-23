@@ -208,6 +208,11 @@ function planePopup(p){
 async function loadPlanes(){
   const note = $("mapNote"); note.className = "show";
   let d; try { d = await (await fetch(`/api/planes?lat=${NOHWA.lat}&lon=${NOHWA.lon}&nm=${PLANE_NM}`)).json(); } catch (e) { d = { ok: false, error: "연결 실패" }; }
+  if (!d.ok){   // 서버가 막히면 휴대폰에서 직접 받아 보기
+    for (const [name, u] of [["airplanes.live", `https://api.airplanes.live/v2/point/${NOHWA.lat}/${NOHWA.lon}/${PLANE_NM}`], ["adsb.lol", `https://api.adsb.lol/v2/lat/${NOHWA.lat}/lon/${NOHWA.lon}/dist/${PLANE_NM}`]]){
+      try { const r = await fetch(u); if (!r.ok) continue; const j = await r.json(); d = { ok: true, source: name + " (직접)", ac: (j.ac || j.aircraft || []).filter(p => p.lat != null) }; break; } catch (e) {}
+    }
+  }
   if (mapMode !== "planes") return;
   if (!d.ok){ note.textContent = `✈️ 비행기 정보를 받지 못했어요 (${d.error || "오류"}). 20초 뒤 다시 시도해요.`; return; }
   const now = Date.now(), seen = new Set();
