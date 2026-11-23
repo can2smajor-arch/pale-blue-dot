@@ -63,13 +63,22 @@ async function iss() {
 // aisstream.io 는 웹소켓으로 실시간 신호를 흘려 보내 줍니다. 몇 초 동안 받아서 배별로 정리해 돌려줍니다.
 async function ships(env) {
   if (!env.AISSTREAM_KEY) return json({ ok: false, need: "AISSTREAM_KEY", error: "선박 위치 서비스 키가 아직 없어요" }, { status: 200 });
+  try { return await shipsInner(env); }
+  catch (e) { const r = json({ ok: false, error: "선박 위치를 받지 못했어요", detail: String(e && e.message || e).slice(0, 200) }); r.headers.set("x-no-cache", "1"); return r; }
+}
+async function shipsInner(env) {
   const resp = await fetch("https://stream.aisstream.io/v0/stream", { headers: { Upgrade: "websocket" } });
   const ws = resp.webSocket;
-  if (!ws) return json({ ok: false, error: "선박 위치 서비스에 연결하지 못했어요" }, { status: 502 });
+  if (!ws) { const r = json({ ok: false, error: "선박 위치 서비스에 연결하지 못했어요", detail: `HTTP ${resp.status} ${(await resp.text()).slice(0, 150)}` }); r.headers.set("x-no-cache", "1"); return r; }
+  let closedWhy = "";
+  ws.addEventListener("close", ev => { closedWhy = `${ev.code} ${ev.reason || ""}`.trim(); });
+  ws.addEventListener("error", ev => { closedWhy = closedWhy || "error " + (ev.message || ""); });
   ws.accept();
   const list = new Map();
   const dec = new TextDecoder();
+  let msgCount = 0;
   ws.addEventListener("message", ev => {
+    msgCount++;
     let m;
     try { m = JSON.parse(typeof ev.data === "string" ? ev.data : dec.decode(ev.data)); } catch { return; }
     const md = m.MetaData || {}, id = md.MMSI;
@@ -93,19 +102,28 @@ async function ships(env) {
   await new Promise(r => setTimeout(r, 7000));   // 7초 동안 들어오는 신호 모으기
   try { ws.close(1000, "done"); } catch {}
   const out = [...list.values()].filter(s => typeof s.lat === "number");
-  return json({ ok: true, source: "aisstream.io", box: NOHWA_BOX, collectedSeconds: 7, ships: out });
+  return json({ ok: true, source: "aisstream.io", box: NOHWA_BOX, collectedSeconds: 7, messages: msgCount, closed: closedWhy || undefined, ships: out });
 }
 
 // ── 세계 실시간 카메라 (Windy Webcams API v3) ──
 async function webcams(env, url) {
   if (!env.WINDY_KEY) return json({ ok: false, need: "WINDY_KEY", error: "웹캠 서비스 키가 아직 없어요" }, { status: 200 });
-  const q = new URLSearchParams({ limit: "24", include: "images,location,player,urls", sortKey: "popularity", sortDirection: "desc" });
-  const near = url.searchParams.get("near");        // "위도,경도,반경km" 를 주면 그 근처
-  if (near && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+$/.test(near)) q.set("nearby", near);
-  const r = await getText("https://api.windy.com/webcams/api/v3/webcams?" + q, 8000, { "x-windy-api-key": env.WINDY_KEY });
-  if (!r.ok) return json({ ok: false, error: `웹캠 서비스 응답 ${r.status}` }, { status: 502 });
-  let d; try { d = JSON.parse(r.text); } catch { return json({ ok: false, error: "웹캠 응답을 읽지 못했어요" }, { status: 502 }); }
-  const cams = (d.webcams || []).map(w => ({
+  // 세계 곳곳에서 고루: 한국, 일본, 동남아, 인도, 유럽, 아프리카, 미주, 오세아니아 (위도,경도,반경km)
+  const REGIONS = [["한국", "36.5,127.8,350"], ["일본", "35.6,139.7,400"], ["동남아", "13.7,100.5,800"], ["인도", "20.6,78.9,1500"],
+    ["유럽", "46.8,8.2,800"], ["아프리카", "-1.3,36.8,2500"], ["남미", "-22.9,-43.2,2000"], ["북미", "40.7,-74.0,1500"], ["오세아니아", "-33.9,151.2,1500"]];
+  const near = url.searchParams.get("near");
+  const list = near && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+$/.test(near) ? [["", near]] : REGIONS;
+  const per = list.length > 1 ? "3" : "24";
+  const results = await Promise.all(list.map(async ([region, nb]) => {
+    const q = new URLSearchParams({ limit: per, include: "images,location,player,urls", sortKey: "popularity", sortDirection: "desc", nearby: nb });
+    try { const r = await getText("https://api.windy.com/webcams/api/v3/webcams?" + q, 8000, { "x-windy-api-key": env.WINDY_KEY });
+      if (!r.ok) return { region, err: r.status, webcams: [] };
+      const d = JSON.parse(r.text); return { region, webcams: d.webcams || [] };
+    } catch (e) { return { region, err: "연결 실패", webcams: [] }; }
+  }));
+  const all = results.flatMap(x => x.webcams.map(w => ({ ...w, _region: x.region })));
+  if (!all.length) return json({ ok: false, error: "웹캠을 받지 못했어요", detail: results.map(x => `${x.region}:${x.err || 0}`).join(" ") }, { status: 502 });
+  const cams = all.map(w => ({ region: w._region,
     id: w.webcamId, title: w.title, city: w.location && w.location.city, country: w.location && w.location.country,
     lat: w.location && w.location.latitude, lon: w.location && w.location.longitude,
     image: w.images && w.images.current && (w.images.current.preview || w.images.current.thumbnail),

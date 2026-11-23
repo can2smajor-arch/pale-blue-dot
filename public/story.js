@@ -261,7 +261,7 @@ async function openCams(){
     el.innerHTML = `<img alt="" loading="lazy"><div><b></b><br><small></small></div>`;
     if (c.image) el.querySelector("img").src = c.image;
     el.querySelector("b").textContent = c.title || "카메라";
-    el.querySelector("small").textContent = [c.city, c.country].filter(Boolean).join(", ");
+    el.querySelector("small").textContent = [c.region, [c.city, c.country].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
     el.onclick = () => openModal(c.player ? `<iframe src="${c.player}" allow="autoplay; fullscreen" allowfullscreen></iframe>` : `<img src="${c.image}" style="width:100%;border-radius:12px">`,
       `${c.title || ""} · 출처: Windy Webcams${c.page ? ` · <a href="${c.page}" target="_blank" rel="noopener">원본 페이지</a>` : ""}`);
     box.appendChild(el);
