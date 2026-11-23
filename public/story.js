@@ -48,12 +48,28 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 #pbd.show{display:block}
 #pbd canvas{position:absolute;inset:0;width:100%;height:100%}
 .ship-ico{background:none;border:none}
+#photo{position:fixed;inset:0;z-index:3;background:#000;opacity:0;pointer-events:none;transition:opacity 1.2s ease;overflow:hidden}
+#photo.show{opacity:1;pointer-events:auto}
+#photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:50% 40%}
+#photo img.contain{object-fit:contain;object-position:50% 30%}
+#photo img.kb{animation:kb 40s ease-out forwards}
+#photo img.pan{animation:pan 60s ease-in-out infinite alternate}
+@keyframes kb{from{transform:scale(1.02)}to{transform:scale(1.18) translateY(-2%)}}
+@keyframes pan{from{object-position:0% 50%}to{object-position:100% 50%}}
+#photo .ph-cap{position:absolute;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));font-size:12.5px;line-height:1.5;color:#e9edf8;
+  text-shadow:0 1px 3px #000,0 0 8px #000;opacity:0;transition:opacity 1s .8s}
+#photo.show .ph-cap{opacity:1}
+#photo .ph-cap b{color:var(--acc)}
+#photo .ph-cap small{display:block;color:#aeb8cc;font-size:10.5px;margin-top:2px}
+#photo .ph-load{position:absolute;left:0;right:0;top:40%;text-align:center;color:#8d97ad;font-size:13px}
+#photo .ph-shade{position:absolute;left:0;right:0;top:0;height:120px;background:linear-gradient(#000a,#0000)}
 .leaflet-popup-content{font-size:12.5px;line-height:1.55}
 `;
 const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
 document.body.insertAdjacentHTML("beforeend", `
 <div id="layer"><div id="map"></div><div id="mapNote"></div><div id="cams"></div></div>
 <div id="pbd"><canvas id="pbdc"></canvas></div>
+<div id="photo"><div class="ph-load" id="phLoad"></div><img id="phImg" alt=""><div class="ph-shade"></div><div class="ph-cap" id="phCap"></div></div>
 <div id="story"><button class="st-x" id="stX" aria-label="이야기 끝내기">×</button>
   <div class="st-t" id="stT"></div><div class="st-p" id="stP"></div><div class="st-live" id="stLive"></div>
   <div class="st-extra" id="stExtra"></div>
@@ -400,6 +416,48 @@ function drawPBD(now){
   requestAnimationFrame(drawPBD);
 }
 
+
+// ───────── 진짜 사진 ─────────
+// 모두 공개 사진이에요. NASA 사진은 퍼블릭 도메인, ESO·ESA/허블·ESA/웹 사진은 CC BY 4.0 (출처 표시)
+const NI = id => `https://images-assets.nasa.gov/image/${id}/${id}~large.jpg`;
+const PH = {
+  iss: { src: NI("s132e012208"), cap: "<b>국제우주정거장</b> · 2010년 5월, 우주왕복선 애틀랜티스호가 떠나며 찍은 모습", credit: "NASA", fx: "kb" },
+  moon: { src: NI("as08-14-2383"), cap: "<b>지구돋이</b> · 1968년 크리스마스이브, 달 뒤를 돌던 아폴로 8호에서 본 지구", credit: "NASA / 아폴로 8호 빌 앤더스", fx: "kb" },
+  sun: { src: () => `https://sdo.gsfc.nasa.gov/assets/img/latest/latest_1024_0171.jpg?t=${Math.floor(Date.now() / 9e5)}`,
+    cap: "<b>오늘의 태양</b> · 지금 이 시각 태양 관측 위성 SDO가 찍은 사진 (자외선)", credit: "NASA / SDO, AIA 171Å", fx: "kb contain" },
+  saturn: { src: NI("PIA17172"), cap: "<b>지구가 웃은 날</b> · 2013년 7월 19일, 토성 뒤에 숨은 카시니호가 찍은 사진. 이 안 어딘가의 작은 파란 점이 지구예요", credit: "NASA / JPL-Caltech / SSI", fx: "kb contain" },
+  voyager: { src: NI("PIA17046"), cap: "<b>보이저 1호</b> · 태양계를 벗어나 별 사이 공간으로 들어가는 모습 (상상도)", credit: "NASA / JPL-Caltech", fx: "pan" },
+  pbd: { src: NI("PIA23645"), cap: "<b>창백한 푸른 점</b> · 1990년 보이저 1호가 찍은 원본을 2020년에 다시 처리한 사진. 햇빛 줄기 속 아주 작은 점 하나가 지구예요", credit: "NASA / JPL-Caltech", fx: "kb contain" },
+  stars: { src: "https://cdn.esawebb.org/archives/images/screen/weic2205a.jpg", cap: "<b>별이 태어나는 곳</b> · 웹 우주망원경이 본 용골자리 성운의 '우주 절벽'. 태양 같은 별도 이런 구름에서 태어났어요", credit: "NASA, ESA, CSA, STScI (CC BY 4.0)", fx: "pan" },
+  milkyway: { src: "https://cdn.eso.org/images/screen/eso0932a.jpg", cap: "<b>우리 은하</b> · 밤하늘 전체를 이어 붙인 은하수. 우리는 이 원반 안쪽에서 바깥을 보고 있어요", credit: "ESO / S. Brunier (CC BY 4.0)", fx: "pan" },
+  andromeda: { src: NI("PIA15416"), cap: "<b>안드로메다 은하</b> · 자외선으로 본 모습. 1조 개쯤의 별이 모인 이웃 은하예요", credit: "NASA / JPL-Caltech (GALEX)", fx: "kb" },
+  deep: { src: "https://cdn.esahubble.org/archives/images/screen/heic0611b.jpg", cap: "<b>허블 울트라 딥 필드</b> · 하늘에서 모래알만 한 조각을 오래 들여다봤더니 은하가 약 1만 개 있었어요. 점 하나하나가 은하예요", credit: "NASA, ESA, S. Beckwith (STScI), HUDF Team (CC BY 4.0)", fx: "kb" },
+  earth: { src: async () => { const d = await (await fetch("/api/epic")).json(); if (!d.ok) throw 0;
+      PH.earth.capNow = `<b>최근 우주에서 찍은 지구</b> · ${d.date.slice(0, 10).replace(/-/g, ". ")}. 150만 km 밖 DSCOVR 위성의 사진이에요. 위쪽 한반도 남쪽 끝 어딘가에 노화도가 있어요`; return d.url; },
+    cap: "", credit: "NASA EPIC / DSCOVR", fx: "kb contain" }
+};
+let phKey = null, phOn = false, phReq = 0;
+async function showPhoto(key){
+  const ph = PH[key]; if (!ph) return hidePhoto();
+  const my = ++phReq; phKey = key; phOn = true;
+  const box = $("photo"), img = $("phImg");
+  box.classList.add("show"); img.style.opacity = 0; $("phCap").innerHTML = ""; $("phLoad").textContent = "📷 사진을 불러오는 중…";
+  let src; try { src = typeof ph.src === "function" ? await ph.src() : ph.src; } catch (e) { src = null; }
+  if (my !== phReq) return;
+  if (!src){ $("phLoad").textContent = ""; hidePhoto(); live("사진을 받지 못해서 모형으로 보여드려요."); setPhotoBtn(); return; }
+  const pre = new Image(); pre.decoding = "async";
+  pre.onload = () => { if (my !== phReq) return;
+    img.className = ""; void img.offsetWidth; img.src = src; img.className = ph.fx; img.style.transition = "opacity 1.2s"; img.style.opacity = 1;
+    $("phLoad").textContent = "";
+    $("phCap").innerHTML = `${ph.capNow || ph.cap}<small>사진: ${ph.credit}</small>`; };
+  pre.onerror = () => { if (my !== phReq) return; $("phLoad").textContent = ""; hidePhoto(); live("사진을 받지 못해서 모형으로 보여드려요."); setPhotoBtn(); };
+  pre.src = src;
+  setPhotoBtn();
+}
+function hidePhoto(){ phReq++; phOn = false; $("photo").classList.remove("show"); setPhotoBtn(); }
+function setPhotoBtn(){ const b = $("phBtn"); if (b) b.textContent = phOn ? (CH[cur].modelLabel || "🔭 모형으로 보기") : "📷 진짜 사진 보기"; }
+function preloadPhoto(i){ const c = CH[i]; if (!c || !c.photo) return; const ph = PH[c.photo]; if (typeof ph.src === "string") { const im = new Image(); im.src = ph.src; } }
+
 // ───────── 이야기 ─────────
 const fmtLyOrKm = au => fmtDist(au);
 const CH = [
@@ -409,29 +467,29 @@ const CH = [
     p: "같은 시각, 지구 어딘가는 한밤이고 어딘가는 막 해가 뜨고 있어요. 세계 곳곳에 공개된 카메라로 <b>지금 그곳</b>을 들여다봐요." },
   { t: "노화도 하늘의 비행기", layer: true, go(){ openMap("planes"); },
     p: "고개를 들면 노화도 하늘 높이 10km에도 길이 있어요. 제주와 김포를 오가는 국내선, 동남아와 중국으로 가는 국제선이 <b>지금 이 위를</b> 지나가고 있어요." },
-  { t: "우주정거장", face: true, go(){ closeLayers(); showISS = true; window.earthFace = () => { const q = issAt(new Date(simMs)); return q ? q.lon : 126.6; }; goTo("earth"); select(null); loadISS().then(ok => { if (!ok) live("우주정거장 궤도 데이터를 받지 못했어요."); }); },
+  { t: "우주정거장", face: true, photo: "iss", photoLater: true, go(){ closeLayers(); showISS = true; window.earthFace = () => { const q = issAt(new Date(simMs)); return q ? q.lon : 126.6; }; goTo("earth"); select(null); loadISS().then(ok => { if (!ok) live("우주정거장 궤도 데이터를 받지 못했어요."); }); },
     p: "땅에서 약 420km 위. 국제우주정거장은 <b>90분마다 지구를 한 바퀴</b> 돌아서, 우주인들은 하루에 해돋이를 열여섯 번 봐요. 파란 선이 앞으로 45분 동안 지나갈 길이에요.",
     extra: [["📺 우주정거장 생중계", openISSLive]], live: true },
-  { t: "달", go(){ closeLayers(); showISS = false; window.earthFace = null; goStep(0); },
+  { t: "달", photo: "moon", go(){ closeLayers(); showISS = false; window.earthFace = null; goStep(0); },
     p: "38만 km, 빛으로 1.3초. 사람이 직접 가 본 가장 먼 곳이에요. 노화도의 <b>밀물과 썰물</b>을 만드는 것도 이 달입니다." },
-  { t: "태양과 이웃 행성", go(){ goStep(1); },
+  { t: "태양과 이웃 행성", photo: "sun", go(){ goStep(1); },
     p: "태양까지 1억 5천만 km. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 태양을 떠난 빛이에요." },
-  { t: "태양계의 끝", go(){ goStep(2); },
+  { t: "태양계의 끝", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
-  { t: "보이저 1호", go(){ closeLayers(); goTo("voyager1"); select(null); },
+  { t: "보이저 1호", photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
     p: () => { const au = Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z), sec = au * LIGHT_AU_S;
       return `1977년에 떠난 보이저 1호는 지금 지구에서 약 <b>${fmtKm(au * AU_KM)}</b>, 빛으로도 <b>${fmtDur(sec)}</b> 걸리는 곳에 있어요. 50년 가까이 지난 지금도 집으로 신호를 보내고 있습니다.`; } },
-  { t: "창백한 푸른 점", pbd: true, go(){ openPBD(); },
+  { t: "창백한 푸른 점", pbd: true, photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
     p: "1990년 2월 14일, 태양계 밖으로 나가던 보이저 1호가 카메라를 돌려 마지막으로 집을 찍었어요. 약 60억 km 떨어진 곳에서요. 사진 속 지구는 햇빛 줄기 사이에 떠 있는, <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>이 사진을 찍자고 한 천문학자 칼 세이건은 이 점을 <b>'창백한 푸른 점'</b>이라고 불렀어요. 그리고 지금까지 있었던 모든 사람과 모든 일이 저 점 하나 위에서 벌어졌다는 것, 그러니 서로를 조금 더 너그럽게 대하고 우리의 하나뿐인 집을 아껴야 한다는 이야기를 남겼어요." },
-  { t: "이웃 별", go(){ closeLayers(); goStep(5); },
+  { t: "이웃 별", photo: "stars", go(){ closeLayers(); goStep(5); },
     p: "가장 가까운 별, 프록시마 센타우리까지 빛으로 4년 3개월. 보이저 1호의 속도로 가면 <b>7만 년이 넘게</b> 걸려요." },
-  { t: "우리 은하", go(){ goStep(8); },
+  { t: "우리 은하", photo: "milkyway", go(){ goStep(8); },
     p: "별 1,000억 개가 넘는 우리 은하. 태양은 그중 평범한 별 하나이고, 노화도는 그 별을 도는 작은 행성의 작은 섬이에요." },
-  { t: "안드로메다 은하", go(){ goStep(10); },
+  { t: "안드로메다 은하", photo: "andromeda", go(){ goStep(10); },
     p: "지금 보이는 안드로메다의 빛은 <b>250만 년 전</b>에 출발했어요. 그 빛이 떠날 때 지구에는 아직 사람이 없었어요." },
-  { t: "볼 수 있는 우주의 끝", go(){ goStep(12); },
+  { t: "볼 수 있는 우주의 끝", photo: "deep", go(){ goStep(12); },
     p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에만 <b>은하가 수천억 개</b> 있어요." },
-  { t: "다시 노화도로", face: true, go(){ closeLayers(); showISS = false; window.earthFace = () => 126.6; follow = null; goTo("earth"); select(null); setTimeout(() => { follow = "earth"; }, 4000); },
+  { t: "다시 노화도로", face: true, photo: "earth", go(){ closeLayers(); showISS = false; window.earthFace = () => 126.6; follow = null; goTo("earth"); select(null); setTimeout(() => { follow = "earth"; }, 4000); },
     p: () => { const kst = new Date(simMs + 9*3600000), hh = kst.getUTCHours();
       return `그리고 다시 집으로. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. 오늘도 앞바다에는 배가 오가고, 달이 끌어당기는 대로 물이 들고 납니다.`; },
     last: true }
@@ -445,6 +503,7 @@ function show(i){
   $("stPrev").disabled = i === 0; $("stNext").textContent = c.last ? "처음으로 ↺" : "다음 ▶";
   const ex = $("stExtra"); ex.innerHTML = "";
   for (const [label, fn] of c.extra || []){ const b = document.createElement("button"); b.textContent = label; b.onclick = fn; ex.appendChild(b); }
+  if (c.photo){ const b = document.createElement("button"); b.id = "phBtn"; b.onclick = () => phOn ? hidePhoto() : showPhoto(c.photo); ex.insertBefore(b, ex.firstChild); }
   $("stDots").innerHTML = CH.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("");
   live(""); clearInterval(liveTimer);
   if (c.live) liveTimer = setInterval(updateISSLive, 1000);
@@ -452,6 +511,8 @@ function show(i){
   if (!c.pbd) { $("pbd").classList.remove("show"); pbdOn = false; }
   if (!c.face) window.earthFace = null;
   c.go();
+  if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
+  preloadPhoto(i + 1);
 }
 function updateISSLive(){
   if (!satrec){ if (issInfo && issInfo.error) live("우주정거장 궤도 데이터를 받지 못했어요."); else live("우주정거장 위치를 계산하는 중…"); return; }
@@ -463,7 +524,7 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+function endStory(){ hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
 window.startStory = () => { document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
 // 자유 모드에서도 지구를 크게 보면 우주정거장이 보이도록

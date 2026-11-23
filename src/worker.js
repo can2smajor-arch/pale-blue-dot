@@ -3,6 +3,7 @@
 //   GET /api/iss      우주정거장 궤도 데이터 (CelesTrak, 키 필요 없음)
 //   GET /api/planes   노화도 하늘의 비행기 (adsb.lol / adsb.fi, 키 필요 없음)
 //   POST /api/routes  편명으로 출발·도착 공항 추정
+//   GET /api/epic     오늘의 지구 사진 (NASA EPIC)
 //   GET /api/ferries  노화도 둘레 여객선 오늘 운항 (완도뱃길 허브)
 //   GET /api/ships    노화도 앞바다의 배 (aisstream.io, 비밀값 AISSTREAM_KEY 필요)
 //   GET /api/webcams  세계 실시간 카메라 (Windy Webcams, 비밀값 WINDY_KEY 필요)
@@ -235,6 +236,23 @@ async function ferries() {
   }
 }
 
+
+// ── 오늘의 지구 사진 (NASA DSCOVR EPIC, 150만 km 밖) — 노화도 쪽을 마주한 사진을 고름 ──
+async function epic() {
+  try {
+    const r = await getText("https://epic.gsfc.nasa.gov/api/natural", 9000);
+    const list = JSON.parse(r.text);
+    if (!Array.isArray(list) || !list.length) throw new Error("사진 목록이 비었어요");
+    const dlon = x => { let d = Math.abs(((x.centroid_coordinates || {}).lon ?? 999) - 126.6) % 360; return d > 180 ? 360 - d : d; };
+    const best = list.slice().sort((a, b) => dlon(a) - dlon(b))[0];
+    const [day] = best.date.split(" "), [Y, M, D] = day.split("-");
+    return json({ ok: true, date: best.date, lat: best.centroid_coordinates.lat, lon: best.centroid_coordinates.lon,
+      url: `https://epic.gsfc.nasa.gov/archive/natural/${Y}/${M}/${D}/jpg/${best.image}.jpg`, source: "NASA EPIC (DSCOVR)" });
+  } catch (e) {
+    const res = json({ ok: false, error: "지구 사진을 받지 못했어요", detail: String(e.message || e).slice(0, 120) }); res.headers.set("x-no-cache", "1"); return res;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -242,6 +260,7 @@ export default {
     if (url.pathname === "/api/diag") return diag(env);
     if (url.pathname === "/api/planes") return cached(request, ctx, 15, () => planes(url));
     if (url.pathname === "/api/routes" && request.method === "POST") return routes(request);
+    if (url.pathname === "/api/epic") return cached(request, ctx, 3600, epic);
     if (url.pathname === "/api/ferries") return cached(request, ctx, 300, ferries);
     if (url.pathname === "/api/ships") return cached(request, ctx, 60, () => ships(env));
     if (url.pathname === "/api/webcams") return cached(request, ctx, 300, () => webcams(env, url));

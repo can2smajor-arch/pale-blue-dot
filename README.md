@@ -20,3 +20,9 @@
   - CC BY 4.0: 태양·금성·해왕성·토성 Solar System Scope, 수성 Shady Tex·Solar System Scope, 목성·천왕성·토성 극 Nestaeric(Sketchfab)
 - 우주정거장 생중계: NASA 공식 유튜브
 - '창백한 푸른 점' 장면은 1990년 보이저 1호 사진(NASA/JPL)을 바탕으로 다시 그린 그림이며, 칼 세이건의 글은 인용하지 않고 우리말로 풀어 썼습니다.
+
+## 이야기 속 사진
+- NASA (퍼블릭 도메인): 국제우주정거장 S132-E-012208, 지구돋이 AS08-14-2383, 토성과 지구 PIA17172, 보이저 상상도 PIA17046, 창백한 푸른 점 PIA23645, 안드로메다 PIA15416(GALEX), 오늘의 태양 SDO/AIA, 최근 지구 사진 EPIC/DSCOVR
+- ESO / S. Brunier — 은하수 파노라마 eso0932a (CC BY 4.0)
+- NASA, ESA, CSA, STScI — 용골자리 성운 '우주 절벽' weic2205a (CC BY 4.0)
+- NASA, ESA, S. Beckwith (STScI), HUDF Team — 허블 울트라 딥 필드 heic0611b (CC BY 4.0)
