@@ -253,6 +253,34 @@ async function epic() {
   }
 }
 
+
+// ── 지도 조각 이어받기 (실제 위성 사진·지형 높이·어제의 지구) — 주소 형식을 숫자로만 받아 다른 곳으로는 못 가게 함 ──
+//   /api/tile/sat/z/x/y   Sentinel-2 cloudless (EOX)       /api/tile/dem/z/x/y   지형 높이 (Terrarium)
+//   /api/tile/day/YYYY-MM-DD/z/row/col   NASA GIBS 그날의 실제 위성 사진 (없으면 하루 전, 그래도 없으면 Blue Marble)
+async function tile(path) {
+  const m = path.match(/^\/api\/tile\/(sat|dem)\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})$/), g = path.match(/^\/api\/tile\/day\/(\d{4}-\d{2}-\d{2})\/(\d)\/(\d{1,3})\/(\d{1,3})$/);
+  let urls = [];
+  if (m) { const [, kind, z, x, y] = m; if (+z > 13) return json({ ok: false }, { status: 400 });
+    urls = kind === "dem" ? [`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`]
+      : [`https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/${z}/${y}/${x}.jpg`,
+         `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`]; }
+  else if (g) { const [, date, z, row, col] = g, prev = new Date(Date.parse(date) - 864e5).toISOString().slice(0, 10);
+    const G = "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best";
+    urls = [`${G}/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${date}/250m/${z}/${row}/${col}.jpg`,
+            `${G}/VIIRS_NOAA21_CorrectedReflectance_TrueColor/default/${date}/250m/${z}/${row}/${col}.jpg`,
+            `${G}/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${prev}/250m/${z}/${row}/${col}.jpg`,
+            `${G}/BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/500m/${z}/${row}/${col}.jpeg`]; }
+  else return json({ ok: false }, { status: 404 });
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const r = await fetch(urls[i], { headers: { "user-agent": "pale-blue-dot (cloudflare worker)" }, signal: AbortSignal.timeout(9000) });
+      if (!r.ok || !/image/.test(r.headers.get("content-type") || "")) continue;
+      return new Response(r.body, { status: 200, headers: { "content-type": r.headers.get("content-type"), "x-src": String(i), "access-control-allow-origin": "*" } });
+    } catch (e) {}
+  }
+  const res = json({ ok: false, error: "조각을 받지 못했어요" }, { status: 502 }); res.headers.set("x-no-cache", "1"); return res;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -260,6 +288,7 @@ export default {
     if (url.pathname === "/api/diag") return diag(env);
     if (url.pathname === "/api/planes") return cached(request, ctx, 15, () => planes(url));
     if (url.pathname === "/api/routes" && request.method === "POST") return routes(request);
+    if (url.pathname.startsWith("/api/tile/")) return cached(request, ctx, url.pathname.includes("/day/") ? 604800 : 2592000, () => tile(url.pathname));
     if (url.pathname === "/api/epic") return cached(request, ctx, 3600, epic);
     if (url.pathname === "/api/ferries") return cached(request, ctx, 300, ferries);
     if (url.pathname === "/api/ships") return cached(request, ctx, 60, () => ships(env));

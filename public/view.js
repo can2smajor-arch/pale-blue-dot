@@ -47,15 +47,18 @@ varying vec2 q;
 uniform vec3 uUp, uF, uRt, uCu; uniform float uH, uTan, uAsp, uT;
 uniform vec3 uSun, uMoon; uniform float uGmst, uMoonOn;
 uniform vec3 uE, uN, uU, uCamL; uniform vec2 uRegHalf; uniform float uTerr;
-uniform sampler2D tDay, tNight, tCloud, tStars, tMoon, tReg;
+uniform sampler2D tDay, tNight, tCloud, tStars, tMoon, tReg, tSat, tPatch;
+uniform float uHmax, uSatOn, uPatchOn; uniform vec4 uPatch;
 const float R = 6371.0, RA = 6431.0, PI = 3.14159265;
 
 vec2 sph(vec3 o, vec3 d, float r){ float b = dot(o, d), c = dot(o, o) - r*r, h = b*b - c; if (h < 0.0) return vec2(-1.0); h = sqrt(h); return vec2(-b - h, -b + h); }
 vec2 llUV(vec3 n){ float lat = asin(clamp(n.z, -1.0, 1.0)), lon = atan(n.y, n.x); return vec2(lon / (2.0*PI) + 0.5, 0.5 - lat / PI); }
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec3 satCol(vec2 u){ vec3 c = texture2D(tSat, u).rgb; c = pow(c, vec3(0.86)) * 1.35; float g = dot(c, vec3(0.3, 0.55, 0.15)); return mix(vec3(g), c, 1.2); }
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
 
+float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
 // 대기: 지나는 공기 두께로 하늘빛을 어림
 vec3 skyCol(vec3 o, vec3 d, float tEnd, out float air, out float haze, out vec3 hc){
   vec2 a = sph(o, d, RA); air = 0.0; haze = 0.0; hc = vec3(0.0);
@@ -94,27 +97,41 @@ vec3 earthSurf(vec3 n, vec3 d, float camH){
   vec2 uv = llUV(n);
   vec3 c = texture2D(tDay, uv).rgb;
   float li = dot(n, uSun), day = smoothstep(-0.08, 0.18, li);
-  // 노화도 둘레: 실제 해안선 지도
+  float cl = texture2D(tCloud, uv).r;
+  cl = smoothstep(0.18, 0.85, cl + (fbm(uv * vec2(900.0, 450.0)) - 0.5) * 0.45 * smoothstep(0.05, 0.4, cl));   // 구름 가장자리에 잔결
+  // 어제 위성이 실제로 찍은 사진 조각 (구름까지 들어 있음)
+  if (uPatchOn > 0.5){
+    float lat = asin(clamp(n.z, -1.0, 1.0)) * 57.29578, lon = atan(n.y, n.x) * 57.29578;
+    vec2 pu = vec2(mod(lon - uPatch.x + 360.0, 360.0), uPatch.y - lat) / uPatch.zw;
+    if (pu.x > 0.0 && pu.x < 1.0 && pu.y > 0.0 && pu.y < 1.0){
+      vec3 pc = texture2D(tPatch, pu).rgb;
+      float w = smoothstep(0.0, 0.08, pu.x) * smoothstep(1.0, 0.92, pu.x) * smoothstep(0.0, 0.08, pu.y) * smoothstep(1.0, 0.92, pu.y);
+      w *= smoothstep(0.02, 0.06, dot(pc, vec3(0.33)));                        // 자료가 빈 검은 곳은 건너뜀
+      c = mix(c, pow(pc, vec3(0.9)) * 1.1, w); cl *= 1.0 - w;
+    }
+  }
+  // 노화도 둘레: 실제 해안선·위성 사진
   vec2 lu = (vec2(dot(n, uE), dot(n, uN)) * R) / (uRegHalf * 2.0) + 0.5;
   float reg = (dot(n, uU) > 0.99 && lu.x > 0.0 && lu.x < 1.0 && lu.y > 0.0 && lu.y < 1.0) ? 1.0 : 0.0;
-  if (reg > 0.5){ vec4 r = texture2D(tReg, vec2(lu.x, 1.0 - lu.y));
+  if (reg > 0.5){ vec2 ru = vec2(lu.x, 1.0 - lu.y); vec4 r = texture2D(tReg, ru);
+    float ew = smoothstep(0.0, 0.06, lu.x) * smoothstep(1.0, 0.94, lu.x) * smoothstep(0.0, 0.06, lu.y) * smoothstep(1.0, 0.94, lu.y) * smoothstep(900.0, 250.0, camH);
     vec3 sea = vec3(0.03, 0.13, 0.22) + vec3(0.0, 0.10, 0.10) * (r.g > 0.99 ? 0.0 : r.g);
     vec3 land = mix(vec3(0.16, 0.27, 0.11), vec3(0.30, 0.34, 0.18), r.r * 3.0);
-    c = (r.r > 0.004) ? land : sea; }
+    vec3 rc = (r.g > 0.995) ? land : sea;
+    if (uSatOn > 0.5) rc = satCol(ru);
+    c = mix(c, rc, ew); cl *= 1.0 - ew * smoothstep(60.0, 12.0, camH); }
+  cl *= smoothstep(1.5, 9.0, camH);
   vec3 lit = c * (0.04 + 0.96 * max(li, 0.0)) * day;
-  float cl = texture2D(tCloud, uv).r * smoothstep(1.5, 9.0, camH);
-  lit = mix(lit, vec3(0.95) * (0.08 + 0.92 * max(li, 0.0)) * day, cl * 0.85);
+  lit = mix(lit, vec3(0.97) * (0.08 + 0.92 * max(li, 0.0)) * day, cl * 0.9);
   vec3 nl = texture2D(tNight, uv).rgb; nl = nl * (0.6 + nl) * 1.8 * vec3(1.0, 0.85, 0.6);
-  if (reg > 0.5) nl = vec3(1.0, 0.75, 0.4) * texture2D(tReg, vec2(lu.x, 1.0 - lu.y)).b * 1.4;
+  if (reg > 0.5 && camH < 250.0) nl = vec3(1.0, 0.75, 0.4) * texture2D(tReg, vec2(lu.x, 1.0 - lu.y)).b * 1.4;
   lit += nl * (1.0 - day) * (1.0 - cl * 0.7);
-  // 바다의 햇빛 반짝임
-  float sea = 1.0 - smoothstep(0.08, 0.2, length(c - vec3(0.03, 0.08, 0.2)));
-  lit += vec3(1.0, 0.9, 0.7) * pow(max(dot(reflect(d, n), uSun), 0.0), 60.0) * 0.6 * day * (reg > 0.5 ? 1.0 : 0.5);
+  lit += vec3(1.0, 0.9, 0.7) * pow(max(dot(reflect(d, n), uSun), 0.0), 60.0) * 0.5 * day * (1.0 - cl);
   return lit;
 }
 // ── 섬 지형: 높이 지도 위를 광선으로 걸어가며 부딪히는 곳 찾기 ──
 float hAt(vec2 xy){ vec2 u = xy / (uRegHalf * 2.0) + 0.5; if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return 0.0;
-  return texture2D(tReg, vec2(u.x, 1.0 - u.y)).r * 0.5; }
+  return texture2D(tReg, vec2(u.x, 1.0 - u.y)).r * uHmax; }
 float surfZ(vec2 xy){ return hAt(xy) - dot(xy, xy) / (2.0 * R); }
 
 void main(){
@@ -129,12 +146,12 @@ void main(){
     vec3 dl = vec3(dot(d, uE), dot(d, uN), dot(d, uU));
     float t = 0.001, tmax = tE > 0.0 ? min(tE * 1.02, 90.0) : 90.0, last = 0.0;
     vec3 p; bool hit = false;
-    for (int i = 0; i < 300; i++){
+    for (int i = 0; i < 380; i++){
       p = uCamL + dl * t;
       float s = surfZ(p.xy);
       if (p.z < s){ hit = true; break; }
-      if (t > tmax || (dl.z > 0.0 && p.z > 0.55)) break;
-      last = max(0.0015, t * 0.028) + max(0.0, (p.z - s) * 0.4);
+      if (t > tmax || (dl.z > 0.0 && p.z > uHmax + 0.05)) break;
+      last = max(0.0012, t * 0.017) + max(0.0, (p.z - s) * 0.4);
       t += last;
     }
     if (hit){
@@ -146,16 +163,19 @@ void main(){
       vec2 uv = p.xy / (uRegHalf * 2.0) + 0.5; vec4 rg = texture2D(tReg, vec2(uv.x, 1.0 - uv.y));
       float li = dot(wn, uSun), day = smoothstep(-0.12, 0.15, li);
       vec3 c;
-      if (h < 0.0015){
+      if (rg.g < 0.995){
         // 바다: 잔물결 + 하늘 반사
         vec2 w = p.xy * 260.0;
-        float n1 = vnoise(w + uT * 0.6) - 0.5, n2 = vnoise(w * 2.3 - uT * 0.9) - 0.5;
-        float amp = 0.07 * exp(-t / 1.2);
+        float n1 = vnoise(w + uT * 0.6) - 0.5 + (vnoise(w * 3.7 + uT * 1.4) - 0.5) * 0.5, n2 = vnoise(w * 2.3 - uT * 0.9) - 0.5 + (vnoise(w * 5.1 - uT * 1.1) - 0.5) * 0.5;
+        n1 += (vnoise(p.xy * 9.0 + uT * 0.08) - 0.5) * 0.45; n2 += (vnoise(p.xy * 7.0 - uT * 0.06) - 0.5) * 0.45;      // 너울
+        float amp = 0.05 * exp(-t / 2.5) + 0.012;
         vec3 nrm = normalize(wn + (uE * n1 + uN * n2) * amp);
         vec3 rd = reflect(d, nrm); if (dot(rd, wn) < 0.01) rd = normalize(rd + wn * (0.01 - dot(rd, wn)));
         float a2, z2; vec3 h2; vec3 sk = skyCol(o, rd, -1.0, a2, z2, h2);
         float fr = 0.04 + 0.96 * pow(1.0 - max(dot(-d, nrm), 0.0), 5.0);
-        vec3 deep = mix(vec3(0.03, 0.12, 0.20), vec3(0.05, 0.22, 0.24), rg.g < 0.99 ? rg.g : 0.0) * (0.15 + 0.85 * max(li, 0.0)) * day;
+        vec3 deepc = mix(vec3(0.03, 0.12, 0.20), vec3(0.05, 0.22, 0.24), rg.g);
+        if (uSatOn > 0.5) deepc = mix(deepc, satCol(vec2(uv.x, 1.0 - uv.y)), 0.75 * smoothstep(0.05, 0.5, max(dot(-d, wn), 0.0)) + 0.1);   // 내려다볼수록 실제 바다빛·양식장이 보임
+        vec3 deep = deepc * (0.15 + 0.85 * max(li, 0.0)) * day;
         c = mix(deep, sk, fr) + vec3(1.0, 0.85, 0.6) * pow(max(dot(rd, uSun), 0.0), 500.0) * 4.0 * day;
         c += vec3(1.0, 0.75, 0.4) * rg.b * 0.25 * (1.0 - day) * exp(-t / 4.0);
       } else {
@@ -166,7 +186,9 @@ void main(){
         vec3 forest = mix(vec3(0.10, 0.20, 0.07), vec3(0.22, 0.30, 0.12), fn);
         vec3 rock = vec3(0.42, 0.38, 0.32);
         c = mix(rock, forest, smoothstep(0.004, 0.02, h));
-        c *= 0.12 + 0.88 * max(dot(nrm, uSun), 0.0) * day + 0.05 * day;
+        float sh = 0.12 + 0.88 * max(dot(nrm, uSun), 0.0) * day + 0.05 * day;
+        if (uSatOn > 0.5){ c = satCol(vec2(uv.x, 1.0 - uv.y)) * (0.92 + 0.16 * fn); sh = (0.38 + 0.62 * max(dot(nrm, uSun), 0.0) / max(dot(wn, uSun), 0.25)) * (0.06 + 0.94 * max(li, 0.0)) * day; }
+        c *= sh;
         c += vec3(1.0, 0.72, 0.35) * rg.b * 0.9 * (1.0 - day);
       }
       float a3, hz; vec3 hc;
@@ -204,12 +226,14 @@ void main(){
       }
     }
   }
-  col = 1.0 - exp(-col * 1.35);           // 부드러운 노출
-  gl_FragColor = vec4(pow(col, vec3(0.92)), 1.0);
+  col = 1.0 - exp(-col * 1.5);                                   // 부드러운 노출
+  col = mix(col, col * col * (3.0 - 2.0 * col), 0.35);            // 대비 조금
+  col += (hash(q * 913.0 + uT) - 0.5) / 255.0;                    // 색 띠 방지
+  gl_FragColor = vec4(pow(clamp(col, 0.0, 1.0), vec3(0.92)), 1.0);
 }`;
 
 // ── 초기화 ──
-let gl, prog, cvs, ovl, oc, U = {}, tex = {}, ready = false, on = false, raf = 0, scale = 0.6;
+let gl, prog, cvs, ovl, oc, U = {}, tex = {}, ready = false, on = false, raf = 0, scale = 0.8, slow = 0, fast = 0, lastTs = 0;
 const state = { lat: 34.262, lon: 126.538, alt: 0.004, az: 150, el: 1, fov: 60 };
 let anim = null, timeOffset = 0, bob = false, markers = [], drift = 0, follow = null, lastNote = "";
 const listeners = [];
@@ -247,11 +271,15 @@ function init(){
   gl.useProgram(prog);
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   const ap = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
-  for (const n of ["uUp","uF","uRt","uCu","uH","uTan","uAsp","uT","uSun","uMoon","uGmst","uMoonOn","uE","uN","uU","uCamL","uRegHalf","uTerr","tDay","tNight","tCloud","tStars","tMoon","tReg"]) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ["uUp","uF","uRt","uCu","uH","uTan","uAsp","uT","uSun","uMoon","uGmst","uMoonOn","uE","uN","uU","uCamL","uRegHalf","uTerr","uHmax","uSatOn","uPatchOn","uPatch","tSat","tPatch","tDay","tNight","tCloud","tStars","tMoon","tReg"]) U[n] = gl.getUniformLocation(prog, n);
   const T = [["tDay", "view/earth-day-4096.webp", 1], ["tNight", "view/earth-night-2048.webp", 1], ["tCloud", "view/clouds-2048.webp", 1],
              ["tStars", "view/stars-2048.webp", 1], ["tMoon", "view/moon-2048.webp", 1], ["tReg", "view/nohwa-1024.png", 0]];
   T.forEach(([n, url, wrap], i) => { gl.uniform1i(U[n], i); tex[n] = makeTex(i, url, wrap); });
-  Promise.all(Object.values(tex)).then(() => { ready = true; });
+  for (const [n, i] of [["tSat", 6], ["tPatch", 7]]){ gl.uniform1i(U[n], i); const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([20, 40, 60, 255]));
+    for (const [k, v2] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v2); }
+  gl.uniform1f(U.uHmax, 0.5); gl.uniform1f(U.uSatOn, 0); gl.uniform1f(U.uPatchOn, 0);
+  Promise.all(Object.values(tex)).then(() => { ready = true; loadReal(); setPatch(34, 127); });
   addEventListener("resize", resize); resize();
   return true;
 }
@@ -259,6 +287,73 @@ function resize(){
   if (!cvs) return; const d = Math.min(devicePixelRatio || 1, 2);
   cvs.width = Math.round(innerWidth * d * scale); cvs.height = Math.round(innerHeight * d * scale);
   ovl.width = innerWidth * d; ovl.height = innerHeight * d;
+}
+
+// ── 진짜 자료 입히기: 위성 사진(Sentinel-2)·지형 높이(Terrarium)·어제의 지구(NASA GIBS) ──
+const real = { sat: false, dem: false, patch: null };
+function loadImg(url){ return new Promise(res => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = () => res(null); im.src = url; }); }
+const mercY = (lat, n) => (1 - Math.asinh(Math.tan(lat * D2R)) / Math.PI) / 2 * n;
+async function mosaic(kind, z){
+  const n = 2 ** z, x0 = Math.floor((REG.lon0 + 180) / 360 * n), x1 = Math.floor((REG.lon1 + 180) / 360 * n), y0 = Math.floor(mercY(REG.lat1, n)), y1 = Math.floor(mercY(REG.lat0, n));
+  const c = document.createElement("canvas"); c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256; const g = c.getContext("2d", { willReadFrequently: kind === "dem" });
+  const jobs = []; let ok = 0, all = 0;
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++){ all++; jobs.push(loadImg(`/api/tile/${kind}/${z}/${x}/${y}`).then(im => { if (im){ ok++; g.drawImage(im, (x - x0) * 256, (y - y0) * 256, 256, 256); } })); }
+  await Promise.all(jobs);
+  if (ok < all * 0.9) return null;
+  const px = lon => ((lon + 180) / 360 * n - x0) * 256, py = lat => (mercY(lat, n) - y0) * 256;
+  return { c, g, px, py };
+}
+async function loadReal(){
+  try {
+    const m = await mosaic("sat", 12);
+    if (m){
+      const N = 2048, o = document.createElement("canvas"); o.width = o.height = N; const g = o.getContext("2d");
+      const sx = m.px(REG.lon0), sw = m.px(REG.lon1) - sx;
+      for (let j = 0; j < N; j++){ const lat = REG.lat1 - (j + 0.5) / N * (REG.lat1 - REG.lat0); g.drawImage(m.c, sx, m.py(lat), sw, 1, 0, j, N, 1); }
+      gl.activeTexture(gl.TEXTURE6); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, o);
+      gl.uniform1f(U.uSatOn, 1); real.sat = true;
+    }
+  } catch (e) { console.warn("sat", e); }
+  try {
+    const m = await mosaic("dem", 11), base = await loadImg("view/nohwa-1024.png");
+    if (m && base){
+      const N = 1024, src = m.g.getImageData(0, 0, m.c.width, m.c.height), W = m.c.width, H = m.c.height, D = src.data;
+      const hgt = (x, y) => { x = Math.max(0, Math.min(W - 1, x)); y = Math.max(0, Math.min(H - 1, y)); const k = (y * W + x) * 4; return D[k] * 256 + D[k + 1] + D[k + 2] / 256 - 32768; };
+      const o = document.createElement("canvas"); o.width = o.height = N; const g = o.getContext("2d", { willReadFrequently: true }); g.drawImage(base, 0, 0, N, N);
+      const im = g.getImageData(0, 0, N, N), P = im.data; let top = 0;
+      for (let j = 0; j < N; j++){ const fy = m.py(REG.lat1 - (j + 0.5) / N * (REG.lat1 - REG.lat0)) - 0.5, y0 = Math.floor(fy), ty = fy - y0;
+        for (let i = 0; i < N; i++){ const fx = m.px(REG.lon0 + (i + 0.5) / N * (REG.lon1 - REG.lon0)) - 0.5, x0 = Math.floor(fx), tx = fx - x0;
+          let h = (hgt(x0, y0) * (1 - tx) + hgt(x0 + 1, y0) * tx) * (1 - ty) + (hgt(x0, y0 + 1) * (1 - tx) + hgt(x0 + 1, y0 + 1) * tx) * ty;
+          const k = (j * N + i) * 4, land = P[k + 1] === 255 || h > 6;
+          if (land){ h = Math.max(h, 1.5); P[k + 1] = 255; } else h = 0;
+          if (h > top) top = h;
+          P[k] = Math.max(0, Math.min(255, Math.round(h / 760 * 255))); } }
+      if (top > 150 && top < 2000){   // 엉뚱한 자료면 쓰지 않음
+        g.putImageData(im, 0, 0);
+        gl.activeTexture(gl.TEXTURE5); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, o);
+        gl.uniform1f(U.uHmax, 0.76); real.dem = true; real.top = Math.round(top);
+      }
+    }
+  } catch (e) { console.warn("dem", e); }
+}
+// 어제 위성이 찍은 지구 조각 (가로세로 18°)을 lat·lon 둘레에 입힘
+let patchBusy = false;
+async function setPatch(lat, lon){
+  if (patchBusy || !gl) return;
+  const z = 6, span = 288 / 2 ** z, cols = Math.round(360 / span), col0 = Math.floor((lon + 180) / span - 1.5), row0 = Math.max(0, Math.min(180 / span - 4, Math.floor((90 - lat) / span - 1.5)));
+  const key = `${col0},${row0}`; if (real.patch === key) return;
+  patchBusy = true;
+  try {
+    const date = new Date(now() - 30 * 3600e3).toISOString().slice(0, 10);
+    const c = document.createElement("canvas"); c.width = c.height = 2048; const g = c.getContext("2d"); let ok = 0; const jobs = [];
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) jobs.push(loadImg(`/api/tile/day/${date}/${z}/${row0 + j}/${((col0 + i) % cols + cols) % cols}`).then(im => { if (im){ ok++; g.drawImage(im, i * 512, j * 512, 512, 512); } }));
+    await Promise.all(jobs);
+    if (ok >= 14){
+      gl.activeTexture(gl.TEXTURE7); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+      gl.uniform4f(U.uPatch, ((-180 + col0 * span) % 360 + 360) % 360, 90 - row0 * span, 4 * span, 4 * span); gl.uniform1f(U.uPatchOn, 1); real.patch = key; real.patchDate = date;
+    }
+  } catch (e) { console.warn("patch", e); }
+  patchBusy = false;
 }
 
 // ── 카메라 ──
@@ -291,6 +386,10 @@ function stepAnim(){
 // ── 그리기 ──
 function frame(ts){
   if (!on) return; raf = requestAnimationFrame(frame);
+  // 기기 성능에 맞춰 선명도 조절
+  const dtf = ts - lastTs; lastTs = ts;
+  if (dtf > 45 && dtf < 500){ if (++slow > 12 && scale > 0.4){ scale *= 0.82; slow = 0; resize(); } } else slow = Math.max(0, slow - 1);
+  if (dtf < 20){ if (++fast > 240 && scale < 1){ scale = Math.min(1, scale * 1.12); fast = 0; resize(); } } else fast = 0;
   stepAnim();
   if (follow) { const p = follow(); if (p && !anim) Object.assign(state, p); }
   const t = ts / 1000, c = camera(state, t), A = astro(now());
@@ -354,7 +453,7 @@ window.PV = {
   get state(){ return state; }, get on(){ return on; }, get ready(){ return ready; },
   set(s){ anim = null; Object.assign(state, s); },
   setMarkers(m){ markers = m || []; }, setBob(b){ bob = b; }, setDrift(dps){ drift = dps; }, setFollow(fn){ follow = fn; },
-  setTimeOffset(ms){ timeOffset = ms; }, get timeOffset(){ return timeOffset; }, now,
+  setTimeOffset(ms){ timeOffset = ms; }, setPatch, get real(){ return real; }, get anim(){ return !!anim; }, get timeOffset(){ return timeOffset; }, now,
   onFrame(fn){ listeners.push(fn); },
   supported(){ try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); } catch (e) { return false; } },
   REG

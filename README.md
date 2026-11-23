@@ -31,3 +31,6 @@
 - 지구 낮·밤 사진: NASA Blue Marble / Black Marble (three-globe 예제 이미지), 구름: NASA Blue Marble 구름층, 별: three-globe 예제 밤하늘, 달 표면: NASA LRO (globe.gl 예제)
 - 노화도 둘레 섬 모양: southkorea-maps 2013 시군구 경계 해안선. 섬 높이는 실제 지형 자료가 아니라 섬 크기로 어림한 값
 - 해·달 위치: 간단한 천문 계산(오차 1° 안팎)
+- 섬과 바다의 실제 모습: Sentinel-2 cloudless 2020 by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2020, CC BY-NC-SA 4.0) — https://s2maps.eu
+- 실제 지형 높이: Mapzen Terrarium terrain tiles (AWS Open Data; SRTM 등)
+- 어제의 지구와 구름: NASA GIBS (VIIRS NOAA-20/21 Corrected Reflectance, Blue Marble)

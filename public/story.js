@@ -55,6 +55,10 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 .radar.on{display:block}
 @keyframes sweep{to{transform:rotate(360deg)}}
 .plane-glow svg{filter:drop-shadow(0 0 4px currentColor)}
+#mile{position:fixed;left:0;right:0;top:27%;z-index:4;text-align:center;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
+#mile.on{opacity:1;transform:none}
+#mile b{display:block;font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;text-shadow:0 2px 12px #000c}
+#mile span{display:block;font-size:14px;color:#ffe2b0;margin-top:4px;text-shadow:0 1px 6px #000}
 #photo{position:fixed;inset:0;z-index:3;background:#000;opacity:0;pointer-events:none;transition:opacity 1.2s ease;overflow:hidden}
 #photo.show{opacity:1;pointer-events:auto}
 #photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform-origin:50% 40%}
@@ -75,7 +79,7 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
 document.body.insertAdjacentHTML("beforeend", `
 <div id="layer"><div id="map"></div><div class="radar" id="radar"></div><div id="mapNote"></div><div id="cams"></div></div>
-<div id="pbd"><canvas id="pbdc"></canvas></div>
+<div id="pbd"><canvas id="pbdc"></canvas></div><div id="mile"></div>
 <div id="photo"><div class="ph-load" id="phLoad"></div><img id="phImg" alt=""><div class="ph-shade"></div><div class="ph-cap" id="phCap"></div></div>
 <div id="story"><button class="st-x" id="stX" aria-label="이야기 끝내기">×</button>
   <div class="st-alt" id="stAlt"></div><div class="st-t" id="stT"></div><div class="st-p" id="stP"></div><div class="st-live" id="stLive"></div>
@@ -506,6 +510,30 @@ function setAlt(c){
   requestAnimationFrame(step);
 }
 
+
+// ───────── 올라가며 지나치는 높이들 ─────────
+const MILES = [[0.03, "30m", "아파트 10층"], [0.433, "433m", "보길도 격자봉 꼭대기"], [1.947, "1,947m", "한라산 꼭대기"], [8.849, "8,849m", "에베레스트 꼭대기"], [10, "10km", "여객기가 나는 높이"],
+  [39, "39km", "사람이 뛰어내린 가장 높은 곳"], [80, "80km", "별똥별이 타오르는 높이"], [100, "100km", "여기부터 우주예요"], [420, "420km", "우주정거장"],
+  [2000, "2,000km", "지구가 둥글게 한눈에"], [20200, "2만 km", "GPS 위성"], [35786, "3만 6천 km", "천리안 위성 · 정지궤도"], [384400, "38만 km", "달"]];
+let lastAlt = null, mileT = 0;
+function mileShow(a, b){ const m = $("mile"); m.innerHTML = `<b>${a}</b><span>${b}</span>`; m.classList.add("on"); clearTimeout(mileT); mileT = setTimeout(() => m.classList.remove("on"), 1700); }
+if (window.PV) PV.onFrame(() => {
+  if (cur < 0 || !CH[cur].pv) { lastAlt = null; return; }
+  const a = PV.state.alt, c = CH[cur];
+  if (lastAlt != null && a > lastAlt * 1.0005) for (const [h, t, d] of MILES) if (lastAlt < h && a >= h && Math.abs(h - c.alt) / h > 0.2) mileShow(t, d);
+  lastAlt = a;
+  if (c.liveAlt && PV.anim){ altAnim++; altShown = Math.max(0.001, a); const [pre, num, unit] = fmtAlt(a); $("stAlt").innerHTML = `${c.liveAlt} ${pre}<b>${num}</b>${unit}`; }
+});
+let storyT0 = Date.now();
+function journeyStats(){
+  const sec = Math.max(20, (Date.now() - storyT0) / 1000), mm = Math.floor(sec / 60), ss = Math.round(sec % 60), n = x => Math.round(x).toLocaleString();
+  return `이 이야기를 보는 <b>${mm ? mm + "분 " : ""}${ss}초</b> 동안,<br>` +
+    `· 지구는 당신을 태우고 태양 둘레를 <b>${n(sec * 29.78)}km</b> 달렸어요<br>` +
+    `· 우주정거장은 <b>${n(sec * 7.66)}km</b>를 날았고<br>` +
+    `· 보이저 1호는 <b>${n(sec * 17)}km</b> 더 멀어졌고<br>` +
+    `· 세상에는 아기 <b>${n(sec * 4.2)}명</b>쯤이 태어났어요`;
+}
+
 // ───────── 이야기 ─────────
 const fmtLyOrKm = au => fmtDist(au);
 
@@ -580,26 +608,26 @@ function issCam(){
 }
 
 const CH = [
-  { t: "배 갑판 위에서", pv: true, alt: 0.004, altNote: "배 갑판", go(){
+  { t: "배 갑판 위에서", pv: true, alt: 0.004, altNote: "눈높이", go(){
       pvEnter(); PV.setBob(true);
       PV.flyTo({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 }, 1500);
       loadFerries();
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000);
       PV.note(timeChip() + (sunEl() < -4 && !PV.timeOffset ? "<br>지금 노화도는 밤이에요. 아래 <b>☀️ 낮 풍경으로</b>를 누르면 낮 바다를 볼 수 있어요." : "")); },
     extra: () => [...dayBtn(), ["🗺️ 뱃길 지도", () => $("layer").classList.contains("show") ? closeLayers() : openMap("ships")]],
-    p: "땅끝에서 산양으로 가는 배 갑판 위예요. 눈앞에 다가오는 섬이 <b>노화도</b>, 오른쪽 너머로 보길도가 보여요. 하늘빛과 해·달의 자리는 <b>지금 이 시각 그대로</b>예요. 파란 배 표시는 지금 운항 중인 여객선이에요." },
-  { t: "갈매기 눈높이", pv: true, alt: 0.35, go(){
+    p: "땅끝에서 산양으로 가는 배 갑판. 당신 눈높이는 바다 위 <b>4m</b>예요. 여기서 보이는 수평선까지는 고작 7km. 사람은 평생 대부분을 이 높이에서 살아요.<br><br>자, 이제 올라가 볼까요? 하늘빛과 해의 자리는 <b>지금 이 시각 그대로</b>예요." },
+  { t: "갈매기 눈높이", pv: true, alt: 0.35, liveAlt: "바다 위", go(){
       pvEnter(); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => PV.setDrift(0.8), 5000);
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000); PV.note(timeChip()); },
     extra: () => [...dayBtn()],
-    p: "갈매기처럼 조금만 날아오르면 섬들이 한눈에 들어와요. 노화도와 보길도, 소안도가 바다 위에 놓여 있고, 그 사이로 매일 배가 다녀요. 우리가 사는 곳은 <b>이만큼의 땅과 바다</b>예요." },
-  { t: "비행기 창가 자리", pv: true, alt: 10.5, go(){
+    p: "아파트 100층 높이. 갈매기에게는 평범한 출근길이에요. 노화도와 보길도 사이 바다에 네모난 점들이 보이나요? <b>전복 양식장</b>이에요. 실제 위성 사진과 실제 산 높이로 만든 풍경이에요." },
+  { t: "비행기 창가 자리", pv: true, alt: 10.5, liveAlt: "바다 위", go(){
       pvEnter(); PV.flyTo({ lat: 34.40, lon: 126.40, alt: 10.5, az: 150, el: -11, fov: 70 }, 6000);
       loadPvPlanes(); let k = 0;
       const upd = () => { PV.setMarkers([...islandMarks(), ...pvPlaneMarks()]); if (++k % 15 === 0) loadPvPlanes(); }; upd(); pvTimer = setInterval(upd, 1000);
       PV.note(timeChip() + "<br>✈️ 점은 지금 이 하늘을 실제로 날고 있는 비행기예요"); },
     extra: () => [...dayBtn(), ["📡 레이더로 보기", () => $("layer").classList.contains("show") ? closeLayers() : openMap("planes")]],
-    p: "고도 10km, 여객기 창가 자리예요. 발아래로 노화도가 손톱만 해졌어요. 같은 하늘에 <b>지금 이 순간</b> 제주로, 상하이로, 마닐라로 가는 사람들이 떠 있어요." },
+    p: "한라산과 에베레스트를 지나 10km. 여객기 창가 자리예요. 방금까지 전부였던 섬이 손톱만 해졌어요. 표시된 점들은 <b>지금 이 순간</b> 이 하늘을 나는 진짜 비행기예요. 저마다 수백 명의 하루를 싣고요." },
   { t: "달을 올려다보다", pv: true, alt: 384400, altNote: "달까지", go(){
       pvEnter(); const off = seeBody("moon", 35, 4.5); },
     extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], jumpButton("moon"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
@@ -608,18 +636,19 @@ const CH = [
       pvEnter(); PV.flyTo({ alt: 110 }, 2500); setTimeout(() => { if (CH[cur].t === "태양을 바라보다") seeBody("sun", 110, 10); }, 2600); },
     extra: () => [jumpButton("sun"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
     p: "공기 위로 올라서면 하늘은 낮에도 까맣고, 태양은 눈부신 흰 별이 돼요. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 저 태양을 떠난 빛이에요. (실제로는 절대 맨눈으로 보면 안 돼요)" },
-  { t: "우주정거장 창밖", pv: true, alt: 420, photo: "iss", photoLater: true, go(){
+  { t: "우주정거장 창밖", pv: true, alt: 420, liveAlt: "땅에서", photo: "iss", photoLater: true, go(){
       pvEnter(); PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 10, color: "#ffb347" }]);
       const go2 = () => { const c = issCam(); if (!c) { PV.flyTo({ lat: 30, lon: 126.6, alt: 420, az: 20, el: -27, fov: 75 }, 5000); return; }
-        PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); return q ? { ...q } : null; }); }, 5100); };
+        PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); if (q && Math.random() < 0.01) PV.setPatch(q.lat, q.lon); return q ? { ...q } : null; }); }, 5100); PV.setPatch(c.lat, c.lon); };
       loadISS().then(go2); PV.note(timeChip()); },
     extra: () => [["📺 우주정거장 생중계", openISSLive]], live: true,
     p: "땅에서 420km 위, 국제우주정거장 창밖이에요. 지금 이 순간 정거장이 실제로 지나는 자리에서 본 모습이에요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
-  { t: "멀어지는 지구", pv: true, alt: 384400, altNote: "지구에서", go(){
+  { t: "멀어지는 지구", pv: true, alt: 384400, liveAlt: "지구에서", go(){
+      PV.setPatch(34, 127);
       pvEnter(); PV.set({ lat: 30, lon: 126.6, alt: 1500, az: 0, el: -89.9, fov: 60 });
-      PV.flyTo({ lat: 30, lon: 126.6, alt: 380000, az: 0, el: -89.9, fov: 28 }, 11000);
+      PV.flyTo({ lat: 30, lon: 126.6, alt: 380000, az: 0, el: -89.9, fov: 28 }, 16000);
       PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 8, color: "#ffb347", maxAlt: 60000 }, { dir: "moon", kind: "ring", label: "달", r: 10, color: "#cfd8ea" }]); PV.note(""); },
-    p: "계속 멀어지면 바다도 섬도 나라도 하나로 이어진 <b>둥근 공</b>이 돼요. 달 거리쯤에서 지구는 팔을 뻗었을 때 엄지손톱보다 작아요. 국경선은 어디에도 보이지 않아요." },
+    p: "한반도 위의 구름은 <b>어제 위성이 실제로 찍은 구름</b>이에요. 멀어질수록 바다도 섬도 나라도 하나의 <b>둥근 공</b>이 돼요. 달 거리에서 지구는 팔을 뻗은 엄지손톱보다 작아요. 국경선은 어디에도 없어요." },
   { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
     p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
   { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, photo: "voyager", go(){ closeLayers(); goTo("voyager1"); select(null); },
@@ -639,7 +668,7 @@ const CH = [
       pvEnter(); PV.setBob(true); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
       PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); PV.note(timeChip()); },
     p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours();
-      return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. 오늘도 앞바다에는 배가 오가고, 달은 바닷물을 끌어당기고, 사람들은 저마다의 하루를 살아요. 저 작은 점 위의, 바로 이곳에서요.`; },
+      return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. ${journeyStats()}<br><br>그 모든 일이 저 작은 점 위에서, 바로 이곳에서 일어났어요.`; },
     last: true }
 ];
 let cur = -1, liveTimer = null;
@@ -682,7 +711,7 @@ $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
 function endStory(){ pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
-window.startStory = () => { document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
+window.startStory = () => { storyT0 = Date.now(); document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
 // 자유 모드에서도 지구를 크게 보면 우주정거장이 보이도록
 showISS = true; loadISS();
 })();
