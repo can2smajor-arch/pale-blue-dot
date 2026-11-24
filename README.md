@@ -38,3 +38,7 @@
 ## 먼 우주 장면 (deep.js)
 - three.js r170 (MIT, public/lib) · 토성·고리 그림은 public/tex 행성 그림 사용
 - 토성 곁, 보이저의 자리, 별 사이, 우리 은하, 은하의 바다 — 방향과 크기 비율은 보기 좋게 다듬은 값이 섞여 있어요(글 속 숫자는 실제 값)
+
+## 소리·공유
+- 소리는 audio.js가 Web Audio로 직접 만들어요(파도·바람·비행기 실내·화음·반짝이는 음) — 외부 음원 없음
+- QR: qrcode-generator 1.4.4 (MIT, Kazuhiko Arase, public/lib)

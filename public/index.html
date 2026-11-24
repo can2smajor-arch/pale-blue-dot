@@ -114,7 +114,9 @@
   <h2>🌏 창백한 푸른 점</h2>
   <p>노화도 앞바다와 하늘에서 출발해<br>우주정거장, 달, 행성을 지나<br>보이저 1호가 뒤돌아본 <b style="color:#ffb347">창백한 푸른 점</b>,<br>그리고 우주의 끝까지 갔다가<br>다시 집으로 돌아옵니다.</p>
   <button id="startStory">📖 이야기로 떠나기</button><br>
+  <div style="font-size:12px;color:#8d97ad;margin:8px 0 2px">🎧 소리와 함께 보면 더 좋아요</div>
   <button id="start" style="background:#ffffff18;color:#eef2fb;margin-top:10px">🔭 자유롭게 둘러보기</button><br>
+  <button id="shareIntro" onclick="window.openShare && openShare()" style="background:none;border:1px solid #ffffff40;color:#cfe3ff;margin-top:14px;font-size:14px;padding:8px 16px">📤 나누기 · QR</button>
   <button id="install" style="display:none;background:none;border:1px solid #ffffff40;color:#cfe3ff;margin-top:14px;font-size:14px;padding:8px 16px">📲 휴대폰에 앱으로 설치</button>
   <div id="iosHint" style="display:none;font-size:13px;color:#aab6cc;margin-top:12px;line-height:1.5">아이폰: 아래 공유 버튼 <b>⬆︎</b> → <b>홈 화면에 추가</b>를 누르면 앱처럼 설치돼요</div>
 </div></div>
@@ -911,6 +913,8 @@ document.getElementById("start").onclick = () => {
   setTimeout(() => { goStep(1); setTimeout(() => showToast("'더 멀리 ▶'를 누르면 한 단계씩 나가요"), 2200); }, 500);
 };
 </script>
+<script src="lib/qrcode.js"></script>
+<script src="audio.js"></script>
 <script src="view.js"></script>
 <script src="helix.js"></script>
 <script type="module" src="deep.js"></script>

@@ -21,6 +21,16 @@ const css = `
 #story .st-dots i{width:6px;height:6px;border-radius:50%;background:#ffffff30}
 #story .st-dots i.on{background:var(--acc);width:16px;border-radius:3px}
 #story .st-x{position:absolute;right:12px;top:8px;background:none;border:none;color:var(--dim);font-size:20px}
+#story .st-snd{position:absolute;right:46px;top:9px;background:none;border:none;color:var(--dim);font-size:17px}
+#share{position:fixed;inset:0;z-index:20;background:#000c;display:none;align-items:center;justify-content:center}
+#share.show{display:flex}
+#share .sh-in{background:#0b1020;border:1px solid #ffffff22;border-radius:18px;padding:18px 18px 14px;width:min(340px,88vw);text-align:center;color:#e9edf8}
+#share .sh-t{font-weight:800;font-size:17px}#share .sh-s{font-size:12.5px;color:#9fb0cc;margin:4px 0 12px}
+#share canvas{position:static!important;display:block;margin:0 auto;inset:auto!important;width:220px!important;height:220px!important;background:#fff;border-radius:10px;padding:10px;box-sizing:content-box}
+#share .sh-u{font-size:11.5px;color:#8d97ad;margin:8px 0 12px;word-break:break-all}
+#share .sh-b{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+#share .sh-b button{flex:1 1 40%;background:#ffffff14;border:1px solid #ffffff26;color:#fff;border-radius:10px;padding:10px 6px;font-size:13.5px}
+#share .sh-b button.main{background:var(--acc);color:#1a1200;border:none;font-weight:700}
 #story .st-extra{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
 #story .st-extra button{border-radius:999px;padding:7px 12px;font-size:12.5px;border:1px solid #ffffff30;background:#ffffff12;color:var(--ink)}
 body.storying #steps, body.storying #nav, body.storying #card, body.storying #hud{display:none!important}
@@ -106,7 +116,7 @@ document.body.insertAdjacentHTML("beforeend", `
 <div id="layer"><div id="map"></div><div class="radar" id="radar"></div><div id="mapNote"></div><div id="cams"></div></div>
 <div id="pbd"><canvas id="pbdc"></canvas></div><div id="mile"></div>
 <div id="photo"><div class="ph-load" id="phLoad"></div><img id="phImg" alt=""><div class="ph-shade"></div><div class="ph-cap" id="phCap"></div></div>
-<div id="story"><button class="st-x" id="stX" aria-label="이야기 끝내기">×</button>
+<div id="story"><button class="st-x" id="stX" aria-label="이야기 끝내기">×</button><button class="st-snd" id="stSnd" aria-label="소리 켜기/끄기"></button>
   <div class="st-alt" id="stAlt"></div><div class="st-t" id="stT"></div><div class="st-p" id="stP"></div><div class="st-live" id="stLive"></div>
   <div class="st-extra" id="stExtra"></div>
   <div class="st-row"><button id="stPrev">◀</button><button class="st-next" id="stNext">다음 ▶</button></div>
@@ -591,6 +601,47 @@ function writeLine(){
     PV.note(v ? `✍️ “${v.replace(/[<>&]/g, "")}”<br><small>이 한 줄은 이 휴대폰에만 남아요</small>` : timeChip()); show(cur); };
 }
 
+
+// ───────── 소리 ─────────
+const SNDMAP = { "배 갑판 위에서": "sea", "갈매기 눈높이": "gull", "비행기 창가 자리": "plane", "달맞이": "moon", "해넘이": "sunset", "우주정거장 창밖": "iss",
+  "멀어지는 지구": "earth", "토성 곁에서": "saturn", "달리는 태양계": "helix", "창백한 푸른 점": "pbd", "별 사이로": "stars", "우리 은하": "galaxy",
+  "은하의 바다": "cosmos", "우주의 1년 달력": "cal", "다시 배 위로": "home" };
+function sndBtn(){ const b = $("stSnd"); if (b && window.SND) b.textContent = SND.muted ? "🔇" : "🔊"; }
+// ───────── 공유·QR ─────────
+function openShare(){
+  let el = $("share");
+  const url = location.origin + "/";
+  if (!el){
+    el = document.createElement("div"); el.id = "share"; document.body.appendChild(el);
+    el.innerHTML = `<div class="sh-in"><div class="sh-t">창백한 푸른 점</div><div class="sh-s">노화도 앞바다에서 우주 끝까지, 그리고 다시 집으로</div>
+      <canvas id="shQr" width="220" height="220"></canvas><div class="sh-u">${url}</div>
+      <div class="sh-b"><button class="main" id="shGo">📤 공유하기</button><button id="shCopy">🔗 링크 복사</button><button id="shSave">⬇️ QR 그림 저장</button><button id="shClose">닫기</button></div></div>`;
+    el.onclick = e => { if (e.target === el) el.classList.remove("show"); };
+    $("shClose").onclick = () => el.classList.remove("show");
+    $("shCopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("shCopy").textContent = "✅ 복사했어요"; } catch (e) { prompt("이 주소를 복사하세요", url); } };
+    $("shGo").onclick = async () => { const data = { title: "창백한 푸른 점", text: "노화도 앞바다에서 우주 끝까지, 그리고 다시 집으로. 우리는 얼마나 작고, 이 순간은 얼마나 귀할까요.", url };
+      if (navigator.share) { try { await navigator.share(data); } catch (e) {} } else $("shCopy").click(); };
+    $("shSave").onclick = () => { const big = document.createElement("canvas"); drawQr(big, url, 1000, true); const a = document.createElement("a"); a.href = big.toDataURL("image/png"); a.download = "창백한푸른점-QR.png"; a.click(); };
+  }
+  drawQr($("shQr"), url, 220, false);
+  el.classList.add("show");
+}
+function drawQr(c, text, size, poster){
+  const qr = qrcode(0, "M"); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), pad = poster ? 0.16 : 0, H = poster ? size * 1.4 : size;
+  c.width = size; c.height = H; const g = c.getContext("2d");
+  g.fillStyle = poster ? "#060916" : "#fff"; g.fillRect(0, 0, size, H);
+  const box = size * (1 - pad * 2), x0 = size * pad, y0 = poster ? size * 0.25 : 0, cell = box / n;
+  if (poster){ g.fillStyle = "#fff"; g.beginPath(); g.roundRect(x0 - cell * 2, y0 - cell * 2, box + cell * 4, box + cell * 4, cell * 2); g.fill();
+    g.fillStyle = "#fff"; g.font = `800 ${size * 0.07}px sans-serif`; g.textAlign = "center"; g.fillText("창백한 푸른 점", size / 2, size * 0.12);
+    g.fillStyle = "#9fd4ff"; g.font = `${size * 0.032}px sans-serif`; g.fillText("노화도 앞바다에서 우주 끝까지, 그리고 다시 집으로", size / 2, size * 0.165);
+    g.fillStyle = "#cfd8ea"; g.font = `${size * 0.036}px sans-serif`; g.fillText("휴대폰 카메라로 비춰 보세요", size / 2, y0 + box + size * 0.11);
+    g.fillStyle = "#8d97ad"; g.font = `${size * 0.026}px sans-serif`; g.fillText(text, size / 2, y0 + box + size * 0.16); }
+  g.fillStyle = "#000";
+  for (let r = 0; r < n; r++) for (let q = 0; q < n; q++) if (qr.isDark(r, q)) g.fillRect(Math.floor(x0 + q * cell), Math.floor(y0 + r * cell), Math.ceil(cell), Math.ceil(cell));
+}
+window.openShare = openShare;
+
 // ───────── 이야기 ─────────
 const fmtLyOrKm = au => fmtDist(au);
 
@@ -804,7 +855,7 @@ const CH = [
   { t: "다시 배 위로", pv: true, alt: 0.004, altNote: "다시 배 갑판", go(){
       pvEnter(); dayTime(); PV.setBob(true); PV.setProp("ship"); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
       PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); PV.note(timeChip()); },
-    extra: () => [["✍️ 이 순간, 한 줄 남기기", writeLine]],
+    extra: () => [["✍️ 이 순간, 한 줄 남기기", writeLine], ["📤 이 이야기 나누기", openShare]],
     p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours(), mine = (() => { try { return localStorage.getItem("pbd-line") || ""; } catch (e) { return ""; } })();
       return `그리고 다시, 노화도 앞바다 배 위.<br><br>우리는 공간으로 보면 점 하나 위의 티끌이고, 시간으로 보면 0.2초예요. 그래서 허무할까요? 아니요. 그래서 <b>지금 이 순간이 귀해요.</b><br><br>더 갖지 못해 애태운 것들은 내려놓아도 괜찮아요. 저 점 위에서 진짜 남는 건 오늘 마주 앉은 사람과 나눈 밥 한 끼, 건넨 말 한마디, 바라본 바다 한 번이에요.<br><br>${journeyStats()}<br><br><b>그 0.2초를, 오늘 어떻게 쓰고 싶으세요?</b>` +
         (mine ? `<div class="myline">“${mine.replace(/[<>&]/g, "")}”<small>— 당신이 남긴 한 줄</small></div>` : ""); },
@@ -844,6 +895,7 @@ function show(i){
   if (!c.pv) pvLeave(); else PV.note("");
   if (!c.hx){ clearInterval(hxTimer); if (window.HX) HX.hide(); }
   if (!c.cal) hideCal();
+  if (window.SND) SND.setMood(SNDMAP[c.t] || "off");
   if (!c.ds && window.DS) DS.hide();
   c.go();
   if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
@@ -859,9 +911,10 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ hideCal(); if (window.DS) DS.hide(); clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+$("stSnd").onclick = () => { if (!window.SND) return; SND.start(); SND.setMuted(!SND.muted); sndBtn(); };
+function endStory(){ hideCal(); if (window.SND) SND.setMood("off"); if (window.DS) DS.hide(); clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
-window.startStory = () => { storyT0 = Date.now();
+window.startStory = () => { storyT0 = Date.now(); if (window.SND) SND.start(); sndBtn();
   wantNight = false; document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
 // 자유 모드에서도 지구를 크게 보면 우주정거장이 보이도록
 showISS = true; loadISS();
