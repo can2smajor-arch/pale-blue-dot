@@ -45,7 +45,7 @@ const FS = `
 precision highp float;
 varying vec2 q;
 uniform vec3 uUp, uF, uRt, uCu; uniform float uH, uTan, uAsp, uT;
-uniform vec3 uSun, uMoon; uniform float uGmst, uMoonOn;
+uniform vec3 uSun, uMoon; uniform float uGmst, uMoonOn, uIllum;
 uniform vec3 uE, uN, uU, uCamL; uniform vec2 uRegHalf; uniform float uTerr;
 uniform sampler2D tDay, tNight, tCloud, tStars, tMoon, tReg, tSat, tPatch;
 uniform float uHmax, uSatOn, uPatchOn; uniform vec4 uPatch;
@@ -180,6 +180,8 @@ void main(){
         vec3 deep = deepc * (0.15 + 0.85 * max(li, 0.0)) * day;
         c = mix(deep, sk, fr) + vec3(1.0, 0.85, 0.6) * pow(max(dot(rd, uSun), 0.0), 500.0) * 4.0 * day;
         c += vec3(1.0, 0.75, 0.4) * rg.b * 0.25 * (1.0 - day) * exp(-t / 4.0);
+        vec3 mdir = normalize(uMoon); float mup = dot(normalize(uMoon + o), uU);
+        c += vec3(1.0, 0.93, 0.8) * (pow(max(dot(rd, mdir), 0.0), 900.0) * 2.2 + pow(max(dot(rd, mdir), 0.0), 120.0) * 0.12) * uIllum * (1.0 - day) * step(-0.02, dot(mdir, wn));   // 달빛 길
       } else {
         float e = 0.06;
         vec3 gn = normalize(vec3(-(hAt(p.xy + vec2(e, 0.0)) - hAt(p.xy - vec2(e, 0.0))) / (2.0*e), -(hAt(p.xy + vec2(0.0, e)) - hAt(p.xy - vec2(0.0, e))) / (2.0*e), 1.0));
@@ -218,6 +220,8 @@ void main(){
       disk = smoothstep(0.999982, 0.999990, cs) * mix(1.0, 0.6, smoothstep(0.12, 0.0, sunUp));
       col += sc * (disk * 6.0 + pow(max(cs, 0.0), 30000.0) * 1.5 + pow(max(cs, 0.0), 3000.0) * 0.25 * (0.3 + air) + pow(max(cs, 0.0), 150.0) * 0.08 * air);
       // 달
+      { float cm = dot(d, normalize(uMoon)); float nd = 1.0 - smoothstep(0.0, 0.15, dot(sk, vec3(0.3, 0.5, 0.2)));
+        col += vec3(0.75, 0.8, 0.95) * (pow(max(cm, 0.0), 3000.0) * 0.35 + pow(max(cm, 0.0), 200.0) * 0.06) * uIllum * nd; }   // 달무리
       if (uMoonOn > 0.5){
         vec2 mh = sph(-uMoon, d, 1737.4);
         if (mh.x > 0.0){
@@ -226,7 +230,8 @@ void main(){
           float lon = atan(dot(mn, xM), dot(mn, zM)), lat = asin(clamp(dot(mn, yM), -1.0, 1.0));
           vec3 mc = texture2D(tMoon, vec2(lon / (2.0*PI) + 0.5, 0.5 - lat / PI)).rgb;
           float ml = max(dot(mn, uSun), 0.0);
-          col = col * 0.6 + mc * (0.02 + 1.25 * ml) * (1.0 - air * 0.35);
+          mc *= mix(vec3(1.0), vec3(1.0, 0.72, 0.45), smoothstep(0.75, 1.0, air));          // 낮게 뜬 달은 노랗게
+          col = col * 0.5 + mc * (0.03 + 2.1 * ml) * (1.0 - air * 0.25);
         }
       }
     }
@@ -276,7 +281,7 @@ function init(){
   gl.useProgram(prog);
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   const ap = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
-  for (const n of ["uUp","uF","uRt","uCu","uH","uTan","uAsp","uT","uSun","uMoon","uGmst","uMoonOn","uE","uN","uU","uCamL","uRegHalf","uTerr","uHmax","uSatOn","uPatchOn","uPatch","tSat","tPatch","tDay","tNight","tCloud","tStars","tMoon","tReg"]) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ["uUp","uF","uRt","uCu","uH","uTan","uAsp","uT","uSun","uMoon","uGmst","uMoonOn","uIllum","uE","uN","uU","uCamL","uRegHalf","uTerr","uHmax","uSatOn","uPatchOn","uPatch","tSat","tPatch","tDay","tNight","tCloud","tStars","tMoon","tReg"]) U[n] = gl.getUniformLocation(prog, n);
   const T = [["tDay", "view/earth-day-4096.webp", 1], ["tNight", "view/earth-night-2048.webp", 1], ["tCloud", "view/clouds-2048.webp", 1],
              ["tStars", "view/stars-2048.webp", 1], ["tMoon", "view/moon-2048.webp", 1], ["tReg", "view/nohwa-1024.png", 0]];
   T.forEach(([n, url, wrap], i) => { gl.uniform1i(U[n], i); tex[n] = makeTex(i, url, wrap); });
@@ -403,7 +408,7 @@ function frame(ts){
   const u3 = (n, a) => gl.uniform3f(U[n], a[0], a[1], a[2]);
   u3("uUp", c.up); u3("uF", c.F); u3("uRt", c.Rt); u3("uCu", c.Cu);
   gl.uniform1f(U.uH, c.alt); gl.uniform1f(U.uTan, c.tan); gl.uniform1f(U.uAsp, asp); gl.uniform1f(U.uT, t);
-  u3("uSun", A.sun); u3("uMoon", sub(A.moon, c.pos)); gl.uniform1f(U.uGmst, A.gmst * D2R); gl.uniform1f(U.uMoonOn, 1);
+  u3("uSun", A.sun); u3("uMoon", sub(A.moon, c.pos)); gl.uniform1f(U.uGmst, A.gmst * D2R); gl.uniform1f(U.uMoonOn, 1); gl.uniform1f(U.uIllum, A.illum);
   const rg = enu(REG.clat, REG.clon), rel = sub(c.pos, ecef(REG.clat, REG.clon, 0));
   u3("uE", rg.east); u3("uN", rg.north); u3("uU", rg.up); u3("uCamL", [dot(rel, rg.east), dot(rel, rg.north), dot(rel, rg.up)]);
   gl.uniform2f(U.uRegHalf, REG.w / 2, REG.h / 2);
@@ -429,7 +434,7 @@ function drawProps(g, t){
   if (!prop) return; const W = innerWidth, H = innerHeight, a = Math.min(1, (performance.now() - propT0) / 1200);
   g.save(); g.globalAlpha = a; if (prop !== "iss") g.filter = `brightness(${propLight.toFixed(2)}) sepia(${(propWarm * 0.6).toFixed(2)})`;
   if (prop === "ship"){
-    const y = H * 0.565 + Math.sin(t * 1.3) * 5, tilt = Math.sin(t * 0.9) * 0.012;
+    const y = H * 0.6 + Math.sin(t * 1.3) * 5, tilt = Math.sin(t * 0.9) * 0.012;
     g.translate(W / 2, y); g.rotate(tilt); g.translate(-W / 2, 0);
     const dk = g.createLinearGradient(0, 30, 0, 140); dk.addColorStop(0, "#d9dde2"); dk.addColorStop(1, "#8d949c");
     g.fillStyle = dk; g.beginPath(); g.moveTo(-20, 62); g.lineTo(W * 0.5, 40); g.lineTo(W + 20, 62); g.lineTo(W + 20, H); g.lineTo(-20, H); g.fill();     // 뱃머리 갑판
@@ -485,11 +490,15 @@ function drawOverlay(c, A){
   g.font = "600 12px sans-serif"; g.textBaseline = "middle";
   for (const m of markers){
     let P;
-    if (m.dir === "moon") P = A.moon; else if (m.dir === "sun") P = add(c.pos, mul(A.sun, 1e7));
+    if (m.sel){   // 달 표면의 한 점 (월면 위도·경도)
+      const zM = norm(mul(A.moon, -1)), xM = norm(cross([0, 0, 1], zM)), yM = cross(zM, xM), la = m.sel[0] * D2R, lo = m.sel[1] * D2R;
+      const n = add(add(mul(zM, Math.cos(la) * Math.cos(lo)), mul(xM, Math.cos(la) * Math.sin(lo))), mul(yM, Math.sin(la)));
+      P = add(A.moon, mul(n, 1737.4)); if (dot(n, sub(c.pos, P)) <= 0) continue;
+    } else if (m.dir === "moon") P = A.moon; else if (m.dir === "sun") P = add(c.pos, mul(A.sun, 1e7));
     else P = ecef(m.lat, m.lon, m.alt || 0);
     if (m.maxAlt && c.alt > m.maxAlt) continue;
     const dist = len(sub(P, c.pos)); if (m.maxDist && dist > m.maxDist) continue;
-    if (!m.dir && hidden(c, P)) continue;
+    if (!m.dir && !m.sel && hidden(c, P)) continue;
     const s = project(c, P); if (!s) continue;
     const x = s.x / d, y = s.y / d; if (x < -40 || y < -40 || x > innerWidth + 40 || y > innerHeight + 40) continue;
     const col = m.color || "#ffd27a";

@@ -57,6 +57,12 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 .plane-glow svg{filter:drop-shadow(0 0 4px currentColor)}
 #story .st-p .tw{opacity:0;animation:tw .01s linear forwards}
 @keyframes tw{to{opacity:1}}
+#moonStrip{display:none;margin-top:10px;background:#0b1328;border:1px solid #ffffff18;border-radius:10px;padding:10px 10px 8px}
+#moonStrip.on{display:block}
+#moonStrip .ms-row{display:flex;align-items:center;gap:1px}
+#moonStrip i{flex:1;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 35%,#8fd0ff,#1d5fae 70%);max-width:12px}
+#moonStrip b{width:4px;height:4px;border-radius:50%;background:#ddd;margin-left:auto;box-shadow:0 0 4px #fff}
+#moonStrip small{display:block;color:#9fb0cc;font-size:11.5px;margin-top:6px}
 #mile{position:fixed;left:0;right:0;top:27%;z-index:4;text-align:center;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
 #mile.on{opacity:1;transform:none}
 #mile b{display:block;font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;text-shadow:0 2px 12px #000c}
@@ -627,6 +633,34 @@ function sunScene(mode){
   PV.setMarkers(islandMarks());
   PV.note(`${mode === "rise" ? "🌅" : "🌇"} ${off != null ? `<b>${kstStr(PV.now())}</b> 노화도 앞바다의 ${name}` : name}` + (off != null && Math.abs(off) > 6e5 ? " · 시간을 옮겨 보여드려요" : ""));
 }
+
+// 달맞이 장면
+let moonMode = "rise";
+const MOON_FEATS = [["고요의 바다 · 아폴로 11호", 0.67, 23.47, "#ffd27a"], ["티코 크레이터", -43.3, -11.2, "#cfe3ff"], ["코페르니쿠스 크레이터", 9.6, -20.1, "#cfe3ff"],
+  ["비의 바다", 32.8, -15.6, "#e6e9f0"], ["위난의 바다", 17.0, 59.1, "#e6e9f0"], ["폭풍의 대양", 18.4, -57.4, "#e6e9f0"], ["맑음의 바다", 28.0, 17.5, "#e6e9f0"]];
+function moonScene(mode){
+  const pt = { lat: 34.215, lon: 126.635, alt: 0.004 };
+  // 오늘 달이 막 떠오른 때(동쪽 수평선 위 9~13°)를 찾음. 이미 떠 있으면 그대로
+  let a = bodyAzel(pt, "moon"), moved = false;
+  if (!(a.el > 8 && a.el < 40)){
+    const t0 = Date.now();
+    for (let m = 0; m < 36 * 60; m += 3){ const ms = t0 + m * 60000, b = bodyAzel(pt, "moon", ms);
+      if (b.el > 9 && b.el < 13 && bodyAzel(pt, "moon", ms + 180000).el > b.el){ PV.setTimeOffset(ms - Date.now()); moved = true; break; } }
+    a = bodyAzel(pt, "moon");
+  }
+  const ill = Math.round(PV.astro(PV.now()).illum * 100), phase = ill > 97 ? "보름달" : ill < 3 ? "그믐달" : `밝은 부분 ${ill}%`;
+  if (mode === "scope"){
+    PV.setBob(false); PV.setProp(null);
+    PV.flyTo({ ...pt, az: a.az, el: a.el - 1.6 * 0.2, fov: 1.6 }, 4500);
+    PV.setMarkers(MOON_FEATS.map(([label, la, lo, color]) => ({ sel: [la, lo], label, color, kind: "ring", r: 5 })));
+    PV.note(`🔭 ${phase} · 지름 3,474km · 지구에서 ${Math.round(PV.azel(pt, PV.astro(PV.now()).moon).dist).toLocaleString()}km`);
+  } else {
+    PV.setBob(true); PV.setProp("ship");
+    PV.flyTo({ ...pt, az: a.az, el: -0.5, fov: Math.max(34, a.el * 3) }, 4500);   // 수평선과 달이 함께 보이게
+    PV.setMarkers([...islandMarks(), { dir: "moon", kind: "ring", r: 12, label: phase, color: "#ffe6b0" }]);
+    PV.note(`🌕 <b>${kstStr(PV.now())}</b> 노화도 동쪽 바다 위로 떠오르는 달` + (moved ? " · 달이 뜨는 시각으로 옮겨 왔어요" : ""));
+  }
+}
 function jumpButton(which){
   return [which === "moon" ? "🌙 달이 뜬 시각으로 가 보기" : "☀️ 해가 뜬 시각으로 가 보기", () => {
     const from = { lat: 34.2, lon: 126.6, alt: 35 }, off = findTime(ms => bodyAzel(from, which, ms).el > 20);
@@ -662,10 +696,14 @@ const CH = [
       PV.note(timeChip() + "<br>✈️ 점은 지금 이 하늘을 실제로 날고 있는 비행기예요"); },
     extra: () => [...dayBtn(), ["📡 레이더로 보기", () => $("layer").classList.contains("show") ? closeLayers() : openMap("planes")]],
     p: "한라산과 에베레스트를 지나 10km. 여객기 창가 자리예요. 방금까지 전부였던 섬이 손톱만 해졌어요. 표시된 점들은 <b>지금 이 순간</b> 이 하늘을 나는 진짜 비행기예요. 저마다 수백 명의 하루를 싣고요." },
-  { t: "달을 올려다보다", pv: true, alt: 384400, altNote: "달까지", go(){
-      pvEnter(); seeBody("moon", 35, 4.5); },
-    extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
-    p: "하늘 높이 올라 고개를 들면, 38만 km 떨어진 <b>달</b>. 사람이 직접 걸어 본 가장 먼 곳이에요. 노화도 앞바다의 밀물과 썰물을 날마다 끌어당기는 것도 이 달이에요. 화면의 달은 지금 이 시각 실제 방향과 모양이에요." },
+  { t: "달맞이", pv: true, alt: 384400, altNote: "달까지", go(){ pvEnter(); moonScene(moonMode); },
+    extra: () => [
+      ...(moonMode !== "scope" ? [["🔭 망원경으로 당겨 보기", () => { moonMode = "scope"; show(cur); }]] : [["🌕 다시 바다에서 보기", () => { moonMode = "rise"; show(cur); }]]),
+      ["🌍 달까지 지구 몇 개?", () => { const b = $("moonStrip"); if (b) b.classList.toggle("on"); }]],
+    p: () => (moonMode === "scope"
+      ? "망원경으로 당겨 본 달이에요. 1969년 7월 20일, 사람이 처음 발을 디딘 곳이 <b>고요의 바다</b>예요. 그 발자국은 바람이 없어서 지금도 그대로 남아 있어요. 어두운 '바다'들은 옛날 흘러나온 용암이 굳은 들판이고, 밝은 점들은 운석이 떨어진 자리예요."
+      : "노화도 앞바다에서 하는 달맞이예요. 달은 늘 <b>같은 얼굴</b>만 지구 쪽으로 보여줘요. 스스로 한 바퀴 도는 데 걸리는 시간과 지구를 한 바퀴 도는 시간이 똑같아서예요. 보름 무렵엔 달과 해가 바닷물을 한쪽으로 함께 끌어당겨서 노화도 앞바다 물이 가장 많이 들고 나요. 그게 <b>사리</b>예요.") +
+      `<div id="moonStrip"><div class="ms-row">${'<i></i>'.repeat(30)}<b></b></div><small>지구 30개를 줄지어 놓으면 그 끝에 달이 있어요 (평균 38만 4천 km)</small></div>` },
   { t: "해넘이", pv: true, alt: 1.496e8, altNote: "태양까지", photo: "sun", photoLater: true, go(){ pvEnter(); sunScene(sunMode); },
     extra: () => [
       ...(sunMode !== "set" ? [["🌇 노화도 해넘이", () => { sunMode = "set"; show(cur); }]] : []),
