@@ -581,19 +581,20 @@ function dayButton(){
 function dayBtn(){ return (PV.timeOffset || sunEl() < 5) ? [dayButton()] : []; }
 function seeBody(which, alt, fov){
   const from = { lat: 34.2, lon: 126.6, alt };
-  let a = bodyAzel(from, which);
+  const name = which === "moon" ? "달" : "해", icon = which === "moon" ? "🌙" : "☀️", josa = which === "moon" ? "달은" : "해는";
   const dip = -Math.acos(6371 / (6371 + alt)) * 180 / Math.PI;
-  const name = which === "moon" ? "달" : "해";
+  let a = bodyAzel(from, which), moved = "";
   if (a.el < dip + 1){
-    PV.flyTo({ ...from, az: a.az, el: Math.max(a.el, -3), fov: 50 }, 4000);
-    const off = findTime(ms => bodyAzel(from, which, ms).el > 20);
-    PV.note(`${which === "moon" ? "🌙" : "☀️"} 지금 ${which === "moon" ? "달은" : "해는"} 지구 반대편, 지평선 아래에 있어요.` + (off != null ? ` 다음에 높이 뜨는 때는 <b>${kstStr(Date.now() + off)}</b>쯤이에요.` : ""));
-    return off;
+    // 지금은 지평선 아래 → 높이 뜬 가장 가까운 시각으로 옮겨서 보여줌
+    const off = findTime(ms => bodyAzel(from, which, ms).el > 25);
+    if (off == null){ PV.flyTo({ ...from, az: a.az, el: Math.max(a.el, -3), fov: 50 }, 4000); PV.note(`${icon} 지금 ${josa} 지평선 아래에 있어요.`); return; }
+    PV.setTimeOffset(off); a = bodyAzel(from, which);
+    moved = `<br>지금 ${josa} 지평선 아래라서, ${name}이 높이 뜨는 <b>${kstStr(PV.now())}</b>로 시간을 옮겨 왔어요.`;
   }
-  PV.flyTo({ ...from, az: a.az, el: a.el, fov }, 5000);
-  PV.note(`${which === "moon" ? "🌙" : "☀️"} ${which === "moon" ? "달은" : "해는"} 지금 노화도에서 ${["북", "북동", "동", "남동", "남", "남서", "서", "북서"][Math.round(a.az / 45) % 8]}쪽 하늘, 고도 ${Math.round(a.el)}°에 있어요` +
-    (which === "moon" ? ` · 밝은 부분 ${Math.round(PV.astro(PV.now()).illum * 100)}%` : ""));
-  return null;
+  PV.flyTo({ ...from, az: a.az, el: a.el - fov * 0.2, fov }, 5000);   // 아래 글 상자에 안 가리게 화면 위쪽에
+  const ill = Math.round(PV.astro(PV.now()).illum * 100);
+  PV.note(`${icon} ${josa} ${["북", "북동", "동", "남동", "남", "남서", "서", "북서"][Math.round(a.az / 45) % 8]}쪽 하늘, 고도 ${Math.round(a.el)}°` +
+    (which === "moon" ? ` · ${ill > 97 ? "보름달" : ill < 3 ? "그믐" : "밝은 부분 " + ill + "%"}` : "") + moved);
 }
 function jumpButton(which){
   return [which === "moon" ? "🌙 달이 뜬 시각으로 가 보기" : "☀️ 해가 뜬 시각으로 가 보기", () => {
@@ -619,7 +620,7 @@ const CH = [
     extra: () => [...dayBtn(), ["🗺️ 뱃길 지도", () => $("layer").classList.contains("show") ? closeLayers() : openMap("ships")]],
     p: "땅끝에서 산양으로 가는 배 갑판. 당신 눈높이는 바다 위 <b>4m</b>예요. 여기서 보이는 수평선까지는 고작 7km. 사람은 평생 대부분을 이 높이에서 살아요.<br><br>자, 이제 올라가 볼까요? 하늘빛과 해의 자리는 <b>지금 이 시각 그대로</b>예요." },
   { t: "갈매기 눈높이", pv: true, alt: 0.35, liveAlt: "바다 위", go(){
-      pvEnter(); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setProp("gull"); }, 2500); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => PV.setDrift(0.8), 5000);
+      pvEnter(); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setProp("gull"); }, 2500); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setDrift(0.8); }, 5000);
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000); PV.note(timeChip()); },
     extra: () => [...dayBtn()],
     p: "아파트 100층 높이. 갈매기에게는 평범한 출근길이에요. 노화도와 보길도 사이 바다에 네모난 점들이 보이나요? <b>전복 양식장</b>이에요. 실제 위성 사진과 실제 산 높이로 만든 풍경이에요." },
@@ -631,8 +632,8 @@ const CH = [
     extra: () => [...dayBtn(), ["📡 레이더로 보기", () => $("layer").classList.contains("show") ? closeLayers() : openMap("planes")]],
     p: "한라산과 에베레스트를 지나 10km. 여객기 창가 자리예요. 방금까지 전부였던 섬이 손톱만 해졌어요. 표시된 점들은 <b>지금 이 순간</b> 이 하늘을 나는 진짜 비행기예요. 저마다 수백 명의 하루를 싣고요." },
   { t: "달을 올려다보다", pv: true, alt: 384400, altNote: "달까지", go(){
-      pvEnter(); const off = seeBody("moon", 35, 4.5); },
-    extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], jumpButton("moon"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
+      pvEnter(); seeBody("moon", 35, 4.5); },
+    extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
     p: "하늘 높이 올라 고개를 들면, 38만 km 떨어진 <b>달</b>. 사람이 직접 걸어 본 가장 먼 곳이에요. 노화도 앞바다의 밀물과 썰물을 날마다 끌어당기는 것도 이 달이에요. 화면의 달은 지금 이 시각 실제 방향과 모양이에요." },
   { t: "태양을 바라보다", pv: true, alt: 1.496e8, altNote: "태양까지", photo: "sun", photoLater: true, go(){
       pvEnter(); PV.flyTo({ alt: 110 }, 2500); setTimeout(() => { if (CH[cur].t === "태양을 바라보다") seeBody("sun", 110, 10); }, 2600); },

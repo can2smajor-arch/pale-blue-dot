@@ -235,7 +235,7 @@ void main(){
 // ── 초기화 ──
 let gl, prog, cvs, ovl, oc, U = {}, tex = {}, ready = false, on = false, raf = 0, scale = 0.8, slow = 0, fast = 0, lastTs = 0;
 const state = { lat: 34.262, lon: 126.538, alt: 0.004, az: 150, el: 1, fov: 60 };
-let anim = null, timeOffset = 0, bob = false, markers = [], drift = 0, follow = null, lastNote = "";
+let driftT0 = 0, anim = null, timeOffset = 0, bob = false, markers = [], drift = 0, follow = null, lastNote = "";
 const listeners = [];
 
 function makeTex(unitIdx, url, wrap){
@@ -361,7 +361,7 @@ const now = () => Date.now() + timeOffset;
 function camera(s, t){
   const f = enu(s.lat, s.lon);
   let alt = s.alt + (bob ? 0.0006 * Math.sin(t * 1.3) : 0);
-  const el = s.el + (bob ? 0.6 * Math.sin(t * 0.9) : 0), az = s.az + drift * t;
+  const el = s.el + (bob ? 0.6 * Math.sin(t * 0.9) : 0), az = s.az + (drift ? drift * (t - driftT0) : 0);
   const F = norm(add(add(mul(f.east, Math.cos(el*D2R) * Math.sin(az*D2R)), mul(f.north, Math.cos(el*D2R) * Math.cos(az*D2R))), mul(f.up, Math.sin(el*D2R))));
   let Rt = cross(F, f.up); if (len(Rt) < 1e-6) Rt = f.east; Rt = norm(Rt);
   const Cu = cross(Rt, F);
@@ -509,7 +509,7 @@ window.PV = {
   show, hide, flyTo, note, azel, astro, ecef, enu,
   get state(){ return state; }, get on(){ return on; }, get ready(){ return ready; },
   set(s){ anim = null; Object.assign(state, s); },
-  setMarkers(m){ markers = m || []; }, setBob(b){ bob = b; }, setDrift(dps){ drift = dps; }, setFollow(fn){ follow = fn; },
+  setMarkers(m){ markers = m || []; }, setBob(b){ bob = b; }, setDrift(dps){ if (drift) state.az += drift * (performance.now() / 1000 - driftT0); drift = dps; driftT0 = performance.now() / 1000; }, setFollow(fn){ follow = fn; },
   setTimeOffset(ms){ timeOffset = ms; }, setPatch, setProp(n){ if (n !== prop){ prop = n; propT0 = performance.now(); } }, get real(){ return real; }, get anim(){ return !!anim; }, get timeOffset(){ return timeOffset; }, now,
   onFrame(fn){ listeners.push(fn); },
   supported(){ try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); } catch (e) { return false; } },
