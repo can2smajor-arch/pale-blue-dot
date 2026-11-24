@@ -596,6 +596,37 @@ function seeBody(which, alt, fov){
   PV.note(`${icon} ${josa} ${["북", "북동", "동", "남동", "남", "남서", "서", "북서"][Math.round(a.az / 45) % 8]}쪽 하늘, 고도 ${Math.round(a.el)}°` +
     (which === "moon" ? ` · ${ill > 97 ? "보름달" : ill < 3 ? "그믐" : "밝은 부분 " + ill + "%"}` : "") + moved);
 }
+
+// 해넘이·해돋이 장면
+let sunMode = "set";
+function nextSunTime(fromPt, kind){
+  const t0 = Date.now();
+  for (let m = 0; m < 36 * 60; m += 2){ const ms = t0 + m * 60000, b = bodyAzel(fromPt, "sun", ms);
+    if (b.el > 0.8 && b.el < 2.6 && (kind === "set" ? b.az > 180 : b.az < 180)){
+      const b2 = bodyAzel(fromPt, "sun", ms + 120000); if (kind === "set" ? b2.el < b.el : b2.el > b.el) return ms - Date.now(); } }
+  return null;
+}
+function sunScene(mode){
+  const name = mode === "rise" ? "해돋이" : "해넘이";
+  if (mode === "orbit"){
+    // 해가 지구 가장자리에 막 걸린 곳을 찾아 420km 위에 섬
+    let best = null;
+    for (let lon = -180; lon < 180; lon += 1){ const from = { lat: 30, lon, alt: 0.01 }, b = bodyAzel(from, "sun", PV.now());
+      if (b.az < 180 && Math.abs(b.el + 18) < 1.2 && (!best || Math.abs(b.el + 18) < best.d)) best = { lon, d: Math.abs(b.el + 18) }; }
+    const lon = best ? best.lon : 126.6, cam = { lat: 30, lon, alt: 420 }, b = bodyAzel(cam, "sun", PV.now());
+    PV.flyTo({ ...cam, az: b.az, el: b.el - 9, fov: 60 }, 5000); PV.setProp(null);
+    PV.note(`🛰️ 지금 이 시각, 경도 ${Math.round(Math.abs(lon))}°${lon >= 0 ? "E" : "W"} 위 420km에서 보는 해돋이`);
+    return;
+  }
+  const pt = mode === "set" ? { lat: 34.205, lon: 126.548, alt: 0.004 } : { lat: 34.215, lon: 126.635, alt: 0.004 };
+  const off = nextSunTime(pt, mode);
+  if (off != null) PV.setTimeOffset(off);
+  const b = bodyAzel(pt, "sun", PV.now());
+  PV.setBob(true); PV.setProp("ship");
+  PV.flyTo({ ...pt, az: b.az, el: b.el - 5.5, fov: 38 }, 4500);   // 해와 수평선이 화면 위쪽에 오게
+  PV.setMarkers(islandMarks());
+  PV.note(`${mode === "rise" ? "🌅" : "🌇"} ${off != null ? `<b>${kstStr(PV.now())}</b> 노화도 앞바다의 ${name}` : name}` + (off != null && Math.abs(off) > 6e5 ? " · 시간을 옮겨 보여드려요" : ""));
+}
 function jumpButton(which){
   return [which === "moon" ? "🌙 달이 뜬 시각으로 가 보기" : "☀️ 해가 뜬 시각으로 가 보기", () => {
     const from = { lat: 34.2, lon: 126.6, alt: 35 }, off = findTime(ms => bodyAzel(from, which, ms).el > 20);
@@ -635,10 +666,14 @@ const CH = [
       pvEnter(); seeBody("moon", 35, 4.5); },
     extra: () => [["🔭 망원경 끄기/켜기", () => { const s = PV.state; PV.flyTo({ fov: s.fov < 20 ? 60 : 4.5 }, 2000); }], ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
     p: "하늘 높이 올라 고개를 들면, 38만 km 떨어진 <b>달</b>. 사람이 직접 걸어 본 가장 먼 곳이에요. 노화도 앞바다의 밀물과 썰물을 날마다 끌어당기는 것도 이 달이에요. 화면의 달은 지금 이 시각 실제 방향과 모양이에요." },
-  { t: "태양을 바라보다", pv: true, alt: 1.496e8, altNote: "태양까지", photo: "sun", photoLater: true, go(){
-      pvEnter(); PV.flyTo({ alt: 110 }, 2500); setTimeout(() => { if (CH[cur].t === "태양을 바라보다") seeBody("sun", 110, 10); }, 2600); },
-    extra: () => [jumpButton("sun"), ...(PV.timeOffset ? [["🕐 지금 시각으로", () => { PV.setTimeOffset(0); show(cur); }]] : [])],
-    p: "공기 위로 올라서면 하늘은 낮에도 까맣고, 태양은 눈부신 흰 별이 돼요. 지금 노화도를 비추는 햇빛은 <b>8분 20초 전</b>에 저 태양을 떠난 빛이에요. (실제로는 절대 맨눈으로 보면 안 돼요)" },
+  { t: "해넘이", pv: true, alt: 1.496e8, altNote: "태양까지", photo: "sun", photoLater: true, go(){ pvEnter(); sunScene(sunMode); },
+    extra: () => [
+      ...(sunMode !== "set" ? [["🌇 노화도 해넘이", () => { sunMode = "set"; show(cur); }]] : []),
+      ...(sunMode !== "rise" ? [["🌅 노화도 해돋이", () => { sunMode = "rise"; show(cur); }]] : []),
+      ...(sunMode !== "orbit" ? [["🛰️ 우주에서 본 해돋이", () => { sunMode = "orbit"; show(cur); }]] : [])],
+    p: () => sunMode === "orbit"
+      ? "우주정거장 높이에서 보는 해돋이예요. 지구 가장자리에 걸린 얇은 공기층이 먼저 붉게, 이어 파랗게 빛나요. 우주인들은 이 장면을 <b>하루에 열여섯 번</b> 봐요. 지구를 감싼 공기는 사과 껍질보다도 얇아요."
+      : `${sunMode === "rise" ? "노화도 앞바다의 해돋이" : "노화도 앞바다의 해넘이"}예요. 지금 보이는 햇빛은 <b>8분 20초 전</b>에 태양을 떠난 빛이에요. 해가 붉은 건, 낮게 깔려 오는 빛이 공기를 수백 km나 지나오는 동안 파란빛은 흩어지고 붉은빛만 남아서예요. 같은 해를 지금 이 순간 지구 어딘가에서는 한낮으로 보고 있어요.` },
   { t: "우주정거장 창밖", pv: true, alt: 420, liveAlt: "땅에서", photo: "iss", photoLater: true, go(){
       pvEnter(); PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 10, color: "#ffb347" }]);
       const go2 = () => { const c = issCam(); if (!c) { PV.flyTo({ lat: 30, lon: 126.6, alt: 420, az: 20, el: -27, fov: 75 }, 5000); return; }

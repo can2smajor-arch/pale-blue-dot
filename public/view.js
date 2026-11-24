@@ -81,9 +81,11 @@ vec3 skyCol(vec3 o, vec3 d, float tEnd, out float air, out float haze, out vec3 
   float day = smoothstep(-0.18, 0.12, sl);
   float low = 1.0 - smoothstep(-0.05, 0.35, sl);                 // 해가 낮으면 붉게
   vec3 blue = mix(vec3(0.14, 0.36, 0.95), vec3(0.70, 0.79, 0.92), whiten);
-  vec3 warm = vec3(1.0, 0.52, 0.25);
-  float toward = pow(max(dot(d, uSun), 0.0), 3.0);
-  vec3 c = mix(blue, warm, low * (0.3 + 0.7 * toward) * (0.35 + 0.65 * whiten));
+  vec3 warm = mix(vec3(1.0, 0.62, 0.30), vec3(1.0, 0.34, 0.08), whiten);
+  float toward = pow(max(dot(d, uSun) * 0.5 + 0.5, 0.0), 4.0);
+  vec3 c = mix(blue, warm, clamp(low * (0.15 + 0.95 * toward) * (0.25 + 0.75 * whiten) * 1.25, 0.0, 1.0));
+  c *= mix(0.42, 1.0, smoothstep(-0.02, 0.3, sl));                 // 해가 낮으면 하늘이 어둑해짐
+  c = mix(c, vec3(0.30, 0.22, 0.42), low * (1.0 - toward) * (1.0 - whiten) * 0.5);   // 해 반대편 높은 하늘은 보랏빛
   vec3 nightc = vec3(0.010, 0.016, 0.04);
   hc = mix(nightc, c, day);
   return hc * air + vec3(1.0, 0.9, 0.7) * pow(max(dot(d, uSun), 0.0), 60.0) * 0.35 * air * day;
@@ -209,8 +211,11 @@ void main(){
       col += starCol(d) * vis;
       // 태양
       float cs = dot(d, uSun);
-      float disk = smoothstep(0.999985, 0.999992, cs);
+      float disk;
+      float sunUp = dot(uUp, uSun);
       vec3 sc = mix(vec3(1.0, 0.98, 0.95), vec3(1.0, 0.55, 0.25), smoothstep(0.4, 1.0, air));
+      sc = mix(sc, vec3(1.0, 0.38, 0.10), smoothstep(0.12, 0.0, sunUp) * smoothstep(0.5, 1.0, air));   // 지는 해는 주황
+      disk = smoothstep(0.999982, 0.999990, cs) * mix(1.0, 0.6, smoothstep(0.12, 0.0, sunUp));
       col += sc * (disk * 6.0 + pow(max(cs, 0.0), 30000.0) * 1.5 + pow(max(cs, 0.0), 3000.0) * 0.25 * (0.3 + air) + pow(max(cs, 0.0), 150.0) * 0.08 * air);
       // 달
       if (uMoonOn > 0.5){
@@ -419,10 +424,10 @@ function hidden(c, P){   // 지구에 가려지나
   if (h < 0) return false; const t = -b - Math.sqrt(h); return t > 0 && t < L;
 }
 // ── 눈앞의 것들: 배 난간, 갈매기, 비행기 날개와 옆을 나는 여객기, 우주정거장 ──
-let prop = null, propT0 = 0;
+let prop = null, propT0 = 0, propLight = 1, propWarm = 0;
 function drawProps(g, t){
   if (!prop) return; const W = innerWidth, H = innerHeight, a = Math.min(1, (performance.now() - propT0) / 1200);
-  g.save(); g.globalAlpha = a;
+  g.save(); g.globalAlpha = a; if (prop !== "iss") g.filter = `brightness(${propLight.toFixed(2)}) sepia(${(propWarm * 0.6).toFixed(2)})`;
   if (prop === "ship"){
     const y = H * 0.565 + Math.sin(t * 1.3) * 5, tilt = Math.sin(t * 0.9) * 0.012;
     g.translate(W / 2, y); g.rotate(tilt); g.translate(-W / 2, 0);
@@ -498,6 +503,7 @@ function drawOverlay(c, A){
     g.lineWidth = 3; g.strokeStyle = "#000a"; g.strokeText(m.label, tx, ty); g.fillStyle = "#fff"; g.fillText(m.label, tx, ty);
     if (m.sub){ g.font = "11px sans-serif"; g.strokeText(m.sub, tx, ty + 14); g.fillStyle = "#cfd8ea"; g.fillText(m.sub, tx, ty + 14); g.font = "600 12px sans-serif"; }
   }
+  { const su = dot(c.up, A.sun); propLight = Math.max(0.1, Math.min(1, (su + 0.06) / 0.32)); propWarm = Math.max(0, Math.min(1, 1 - su / 0.2)) * (su > -0.05 ? 1 : 0); }
   drawProps(g, performance.now() / 1000);
 }
 
