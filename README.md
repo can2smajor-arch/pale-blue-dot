@@ -34,3 +34,7 @@
 - 섬과 바다의 실제 모습: Sentinel-2 cloudless 2020 by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2020, CC BY-NC-SA 4.0) — https://s2maps.eu
 - 실제 지형 높이: Mapzen Terrarium terrain tiles (AWS Open Data; SRTM 등)
 - 어제의 지구와 구름: NASA GIBS (VIIRS NOAA-20/21 Corrected Reflectance, Blue Marble)
+
+## 먼 우주 장면 (deep.js)
+- three.js r170 (MIT, public/lib) · 토성·고리 그림은 public/tex 행성 그림 사용
+- 토성 곁, 보이저의 자리, 별 사이, 우리 은하, 은하의 바다 — 방향과 크기 비율은 보기 좋게 다듬은 값이 섞여 있어요(글 속 숫자는 실제 값)

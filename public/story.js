@@ -560,6 +560,12 @@ function journeyStats(){
 }
 
 
+// 먼 우주 장면 (deep.js, three.js 모듈)
+function dsEnter(name){
+  pvLeave(); closeLayers(); hidePhoto(); window.earthFace = null;
+  const go = () => DS.show(name);
+  if (window.DS) go(); else addEventListener("ds-ready", go, { once: true });
+}
 // ───────── 우주의 1년 달력 ─────────
 function showCal(){
   let el = $("cal");
@@ -773,26 +779,26 @@ const CH = [
       PV.setMarkers([{ kind: "ring", lat: 34.19, lon: 126.57, alt: 0, label: "노화도", r: 8, color: "#ffb347", maxAlt: 60000 }, { dir: "moon", kind: "ring", label: "달", r: 10, color: "#cfd8ea" }]); PV.note(""); },
     extra: () => [["🌙 달 거리까지 더 멀리", () => PV.flyTo({ alt: 380000, fov: 28 }, 12000)], ["🌍 다시 가까이", () => PV.flyTo({ alt: 30000, fov: 44 }, 8000)]],
     p: "한반도 위의 구름은 <b>어제 위성이 실제로 찍은 구름</b>이에요. 멀어질수록 바다도 섬도 나라도 하나의 <b>둥근 공</b>이 돼요. 달 거리에서 지구는 팔을 뻗은 엄지손톱보다 작아요. 국경선은 어디에도 없어요." },
+  { t: "토성 곁에서", ds: "saturn", alt: 1.4e9, altNote: "지구에서", photo: "saturn", photoLater: true, go(){ dsEnter("saturn"); },
+    extra: () => [["↺ 다시 보기", () => DS.replay()]],
+    p: "지구에서 14억 km, 토성 곁이에요. 고리는 얼음 조각 수십억 개예요. 토성 뒤 그늘로 돌아 들어가면 햇빛에 비친 고리 너머로 <b>작은 파란 점</b>이 보여요. 2013년 카시니호가 실제로 이 자리에서 지구를 찍었어요." },
   { t: "달리는 태양계", hx: true, alt: 4.5e9, altNote: "태양계 바깥에서", go(){
       closeLayers(); hidePhoto(); HX.show(); const t0 = Date.now(); clearInterval(hxTimer);
       const upd = () => { const sec = (Date.now() - t0) / 1000; live(`이 장면을 보는 <b>${sec.toFixed(0)}초</b> 동안 당신은 우주에서 <b>${Math.round(sec * 230).toLocaleString()}km</b>를 움직였어요<br><small>태양이 은하를 도는 빠르기 초속 약 230km · 은하 한 바퀴에 약 2억 3천만 년</small>`); };
       upd(); hxTimer = setInterval(upd, 200); },
     p: "가만히 앉아 있다고 생각했죠? 태양은 초속 230km로 은하를 돌고, 행성들은 그 둘레를 돌며 따라가요. 그래서 지구가 우주에 그리는 길은 동그라미가 아니라 <b>끝없는 나선</b>이에요. 당신은 태어나서 단 한 번도 같은 자리에 있었던 적이 없어요." },
-  { t: "태양계의 끝", alt: 4.5e9, altNote: "해왕성까지", photo: "saturn", go(){ goStep(2); },
-    p: "해왕성까지 빛으로 4시간. 여기서는 지구가 벌써 <b>작은 점 하나</b>로 보여요." },
-  { t: "보이저 1호", alt: () => Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z) * AU_KM, go(){ closeLayers(); goTo("voyager1"); select(null); },
-    p: () => { const au = Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z), sec = au * LIGHT_AU_S;
-      return `1977년에 떠난 보이저 1호는 지금 지구에서 약 <b>${fmtKm(au * AU_KM)}</b>, 빛으로도 <b>${fmtDur(sec)}</b> 걸리는 곳에 있어요. 50년 가까이 지난 지금도 집으로 신호를 보내고 있습니다.`; } },
-  { t: "창백한 푸른 점", pbd: true, alt: 6e9, altNote: "1990년 보이저 1호의 자리", photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
-    p: "1990년 2월 14일, 태양계 밖으로 나가던 보이저 1호가 마지막으로 뒤를 돌아 집을 찍었어요. 60억 km 밖에서 본 지구는 햇빛 줄기 속 <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>저 점 위에서 사람들은 더 넓은 땅, 더 많은 돈, 더 높은 자리를 두고 평생을 다퉜어요. 그런데 여기서 보면 그 모든 것이 <b>점 하나 안의 일</b>이에요. 이긴 사람도 진 사람도, 부자도 가난한 사람도 같은 점 위에 있었어요.<br><br>그러니 더 가지려 애쓰기보다, 이 작은 점 위에서 서로에게 조금 더 다정하면 어떨까요. 우리가 아는 집은 아직 여기 하나뿐이니까요." },
-  { t: "이웃 별", alt: 4.24 * LY_KM, photo: "stars", go(){ closeLayers(); goStep(5); },
-    p: "가장 가까운 별, 프록시마 센타우리까지 빛으로 4년 3개월. 보이저 1호의 속도로 가면 <b>7만 년이 넘게</b> 걸려요." },
-  { t: "우리 은하", alt: 26000 * LY_KM, altNote: "은하 중심까지", photo: "milkyway", go(){ goStep(8); },
-    p: "별 1,000억 개가 넘는 우리 은하. 태양은 그중 평범한 별 하나이고, 노화도는 그 별을 도는 작은 행성의 작은 섬이에요." },
-  { t: "안드로메다 은하", alt: 2.5e6 * LY_KM, photo: "andromeda", go(){ goStep(10); },
-    p: "지금 보이는 안드로메다의 빛은 <b>250만 년 전</b>에 출발했어요. 그 빛이 떠날 때 지구에는 아직 사람이 없었어요." },
-  { t: "볼 수 있는 우주의 끝", alt: 4.65e10 * LY_KM, photo: "deep", go(){ goStep(12); },
-    p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에 <b>은하가 수천억 개</b>, 별은 바닷가 모래알보다 많아요.<br><br>공간으로 보면 우리는 이만큼 작아요. 그럼 시간으로 보면 어떨까요?" },
+  { t: "창백한 푸른 점", ds: "pbd", alt: 6e9, altNote: "1990년 보이저 1호의 자리", photo: "pbd", photoLater: true, go(){ dsEnter("pbd"); },
+    extra: () => [["↺ 다시 보기", () => DS.replay()]],
+    p: "1990년 2월 14일, 태양계를 떠나던 보이저 1호가 마지막으로 뒤를 돌아 집을 찍었어요. 60억 km 밖에서 본 지구는 햇빛 줄기 속 <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>저 점 위에서 사람들은 더 넓은 땅, 더 많은 돈, 더 높은 자리를 두고 평생을 다퉜어요. 여기서 보면 모두 <b>점 하나 안의 일</b>이에요. 그러니 더 가지려 애쓰기보다, 서로에게 조금 더 다정하면 어떨까요. 우리가 아는 집은 아직 여기 하나뿐이니까요." },
+  { t: "별 사이로", ds: "stars", alt: 4.24 * LY_KM, altNote: "가장 가까운 별까지", photo: "stars", photoLater: true, go(){ dsEnter("stars"); },
+    extra: () => [["↺ 다시 보기", () => DS.replay()]],
+    p: "태양계를 벗어나 뒤돌아보면, 태양은 수많은 별 가운데 <b>평범한 별 하나</b>가 돼요. 가장 가까운 이웃 별 알파 센타우리까지 4.24광년. 보이저 1호의 빠르기로 가도 <b>7만 5천 년</b>이 걸려요." },
+  { t: "우리 은하", ds: "galaxy", alt: 26000 * LY_KM, altNote: "은하 중심까지", photo: "milkyway", photoLater: true, go(){ dsEnter("galaxy"); },
+    extra: () => [["↺ 다시 보기", () => DS.replay()]],
+    p: "그 별들이 수천억 개 모여 소용돌이를 이룬 곳이 우리 은하예요. 태양은 중심에서 2만 6천 광년 떨어진 나선팔 한 귀퉁이에 있어요. 은하를 한 바퀴 도는 데 <b>2억 3천만 년</b>이 걸려요." },
+  { t: "은하의 바다", ds: "cosmos", alt: 4.65e10 * LY_KM, altNote: "볼 수 있는 우주의 끝까지", photo: "deep", photoLater: true, go(){ dsEnter("cosmos"); },
+    extra: () => [["↺ 다시 보기", () => DS.replay()], ["📷 안드로메다 사진", () => showPhoto("andromeda")]],
+    p: "더 멀어지면 우리 은하도 점 하나예요. 이웃 안드로메다 은하를 지나, 은하들이 실처럼 이어진 <b>우주의 거미줄</b>이 펼쳐져요. 볼 수 있는 우주 안에만 은하가 <b>수천억 개</b>.<br><br>공간으로 보면 우리는 이만큼 작아요. 그럼 시간으로 보면 어떨까요?" },
   { t: "우주의 1년 달력", cal: true, alt: null, go(){ closeLayers(); hidePhoto(); showCal(); },
     p: "우주가 태어나고 지금까지 138억 년을 <b>1년 달력</b>에 줄여 넣으면, 사람이 나타난 건 12월 31일 밤 11시 48분이에요. 장보고도, 이순신도, 기록된 모든 역사는 <b>마지막 11초</b> 안에 있어요.<br><br>그리고 당신의 한평생은 그 달력에서 <b>0.2초</b>, 눈 한 번 깜빡할 시간이에요." },
   { t: "다시 배 위로", pv: true, alt: 0.004, altNote: "다시 배 갑판", go(){
@@ -838,6 +844,7 @@ function show(i){
   if (!c.pv) pvLeave(); else PV.note("");
   if (!c.hx){ clearInterval(hxTimer); if (window.HX) HX.hide(); }
   if (!c.cal) hideCal();
+  if (!c.ds && window.DS) DS.hide();
   c.go();
   if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
   preloadPhoto(i + 1);
@@ -852,7 +859,7 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ hideCal(); clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+function endStory(){ hideCal(); if (window.DS) DS.hide(); clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
 window.startStory = () => { storyT0 = Date.now();
   wantNight = false; document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
