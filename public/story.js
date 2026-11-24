@@ -57,6 +57,23 @@ body.storying #steps, body.storying #nav, body.storying #card, body.storying #hu
 .plane-glow svg{filter:drop-shadow(0 0 4px currentColor)}
 #story .st-p .tw{opacity:0;animation:tw .01s linear forwards}
 @keyframes tw{to{opacity:1}}
+#cal{position:fixed;inset:0;z-index:3;background:radial-gradient(ellipse at 50% 30%,#101a38,#02030a 70%);opacity:0;pointer-events:none;transition:opacity 1s;overflow:hidden}
+#cal.show{opacity:1}
+#cal .cal-in{position:absolute;left:18px;right:18px;top:calc(18px + env(safe-area-inset-top))}
+#cal .cal-t{font-size:13px;color:#9fb0cc;margin-bottom:10px;letter-spacing:.3px}
+#cal .cal-r{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid #ffffff10;opacity:0;transform:translateY(6px);animation:calin .6s forwards}
+#cal .cal-r span{flex:0 0 132px;color:#8d97ad;font-size:12px;font-variant-numeric:tabular-nums}
+#cal .cal-r b{font-weight:600;font-size:13.5px;color:#e6ebf5}
+#cal .cal-r.hl b{color:#ffd27a}#cal .cal-r.me b{color:#35e0ff;font-size:15px}#cal .cal-r.me span{color:#35e0ff}
+@keyframes calin{to{opacity:1;transform:none}}
+#cal .cal-clock{margin-top:16px;text-align:center;font-size:15px;color:#cfd8ea;font-variant-numeric:tabular-nums}
+#cal .cal-clock b{font-size:30px;color:#35e0ff;font-weight:800}
+#cal .cal-clock small{display:block;font-size:11.5px;color:#8d97ad;margin-top:2px}
+.lineBox{display:flex;gap:6px;width:100%;margin-top:6px}
+.lineBox input{flex:1;min-width:0;background:#0b1328;border:1px solid #ffffff30;border-radius:10px;color:#fff;padding:9px 10px;font-size:15px}
+.lineBox button{background:var(--acc);color:#1a1200;border:none;border-radius:10px;padding:0 14px;font-weight:700}
+#story .st-p .myline{margin-top:12px;padding:10px 12px;border-left:3px solid #35e0ff;background:#35e0ff12;color:#fff;font-size:15px}
+#story .st-p .myline small{display:block;color:#8d97ad;font-size:11px;margin-top:3px}
 #moonStrip{display:none;margin-top:10px;background:#0b1328;border:1px solid #ffffff18;border-radius:10px;padding:10px 10px 8px}
 #moonStrip.on{display:block}
 #moonStrip .ms-row{display:flex;align-items:center;gap:1px}
@@ -507,7 +524,7 @@ function fmtAlt(km){
 }
 function setAlt(c){
   let target = typeof c.alt === "function" ? c.alt() : c.alt;
-  if (target == null || isNaN(target)) { $("stAlt").innerHTML = ""; return; }
+  if (target == null || isNaN(target)) { altAnim++; $("stAlt").innerHTML = ""; return; }
   target = Math.max(0.001, target);
   const from = Math.log10(altShown), to = Math.log10(target), t0 = performance.now(), dur = Math.min(2600, 700 + Math.abs(to - from) * 260), my = ++altAnim;
   const step = now => { if (my !== altAnim) return;
@@ -540,6 +557,32 @@ function journeyStats(){
     `· 우주정거장은 <b>${n(sec * 7.66)}km</b>를 날았고<br>` +
     `· 보이저 1호는 <b>${n(sec * 17)}km</b> 더 멀어졌고<br>` +
     `· 세상에는 아기 <b>${n(sec * 4.2)}명</b>쯤이 태어났어요`;
+}
+
+
+// ───────── 우주의 1년 달력 ─────────
+function showCal(){
+  let el = $("cal");
+  if (!el){ el = document.createElement("div"); el.id = "cal"; document.body.insertBefore(el, $("photo")); }
+  const rows = [["1월 1일 0시", "빅뱅 · 우주가 태어남"], ["3월 16일", "우리 은하가 생겨남"], ["9월 초", "태양과 지구가 생겨남"], ["9월 21일", "바다에서 첫 생명"],
+    ["12월 25일", "공룡이 걸어 다님"], ["12월 31일 밤 11시 48분", "사람(호모 사피엔스)이 나타남", "hl"], ["11시 59분 49초", "글자를 쓰고 역사를 기록함"],
+    ["11시 59분 57초", "장보고가 청해진을 세움 (828년)"], ["마지막 0.2초", "당신의 한평생", "me"]];
+  el.innerHTML = `<div class="cal-in"><div class="cal-t">138억 년을 1년으로 줄이면</div>${rows.map(([a, b, c], k) => `<div class="cal-r ${c || ""}" style="animation-delay:${0.3 + k * 0.55}s"><span>${a}</span><b>${b}</b></div>`).join("")}<div class="cal-clock" id="calClock"></div></div>`;
+  el.classList.add("show");
+  // 달력 시계: 12월 31일 23:59:59.8 → 0.2초 동안이 당신의 일생
+  const clock = $("calClock"); let t0 = performance.now() + 5600;
+  const tick = () => { if (!el.classList.contains("show")) return; const dt = Math.max(0, performance.now() - t0) / 1000, f = Math.min(1, dt / 6);
+    clock.innerHTML = f <= 0 ? "" : `12월 31일 23:59:<b>${Math.min(59.999, 59.8 + 0.2 * f).toFixed(3)}</b><small>${f < 1 ? "당신의 한평생이 지나가는 중" : "이 0.2초 안에 우리의 모든 날이 있어요"}</small>`; requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+function hideCal(){ const el = $("cal"); if (el) el.classList.remove("show"); }
+function writeLine(){
+  let old = ""; try { old = localStorage.getItem("pbd-line") || ""; } catch (e) {}
+  const box = document.createElement("div"); box.className = "lineBox";
+  box.innerHTML = `<input maxlength="60" placeholder="예) 오늘은 엄마에게 전화하기" value="${old.replace(/"/g, "&quot;")}"><button>남기기</button>`;
+  $("stExtra").appendChild(box); const inp = box.querySelector("input"); inp.focus();
+  box.querySelector("button").onclick = () => { const v = inp.value.trim(); try { if (v) localStorage.setItem("pbd-line", v); else localStorage.removeItem("pbd-line"); } catch (e) {}
+    PV.note(v ? `✍️ “${v.replace(/[<>&]/g, "")}”<br><small>이 한 줄은 이 휴대폰에만 남아요</small>` : timeChip()); show(cur); };
 }
 
 // ───────── 이야기 ─────────
@@ -692,7 +735,7 @@ const CH = [
       pvEnter(); dayTime(); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setProp("gull"); }, 2500); PV.flyTo({ lat: 34.245, lon: 126.505, alt: 0.35, az: 125, el: -13, fov: 62 }, 5000); setTimeout(() => { if (CH[cur].t === "갈매기 눈높이") PV.setDrift(0.8); }, 5000);
       const upd = () => PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); upd(); pvTimer = setInterval(upd, 2000); PV.note(timeChip()); },
     extra: () => [...dayBtn()],
-    p: "아파트 100층 높이. 갈매기에게는 평범한 출근길이에요. 노화도와 보길도 사이 바다에 네모난 점들이 보이나요? <b>전복 양식장</b>이에요. 실제 위성 사진과 실제 산 높이로 만든 풍경이에요." },
+    p: "아파트 100층 높이. 갈매기에게는 평범한 출근길이에요. 노화도와 보길도 사이 바다에 네모난 점들이 보이나요? <b>전복 양식장</b>이에요. 땅에 있을 땐 저 바다 한 칸, 밭 한 뙈기가 그렇게 크고 중요했는데, 겨우 350m 올라왔을 뿐인데 벌써 작아 보여요." },
   { t: "비행기 창가 자리", pv: true, alt: 10.5, liveAlt: "바다 위", go(){
       pvEnter(); dayTime(); setTimeout(() => { if (CH[cur].t === "비행기 창가 자리") PV.setProp("plane"); }, 4500); PV.flyTo({ lat: 34.40, lon: 126.40, alt: 10.5, az: 150, el: -11, fov: 70 }, 6000);
       loadPvPlanes(); let k = 0;
@@ -722,7 +765,7 @@ const CH = [
         PV.flyTo({ ...c, el: -27, fov: 75 }, 5000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setProp("iss"); }, 4000); setTimeout(() => { if (CH[cur].t === "우주정거장 창밖") PV.setFollow(() => { const q = issCam(); if (q && Math.random() < 0.01) PV.setPatch(q.lat, q.lon); return q ? { ...q } : null; }); }, 5100); PV.setPatch(c.lat, c.lon); };
       realTime(); loadISS().then(go2); PV.note(timeChip()); },
     extra: () => [["📺 우주정거장 생중계", openISSLive]], live: true,
-    p: "땅에서 420km 위. 눈앞에 떠 있는 게 축구장만 한 <b>국제우주정거장</b>이에요. 지금 이 순간에도 사람이 저 안에 살고 있어요. 아래 지구는 정거장이 지금 실제로 지나는 자리예요. <b>90분마다 지구를 한 바퀴</b> 돌아서 우주인들은 하루에 해돋이를 열여섯 번 봐요." },
+    p: "땅에서 420km 위. 눈앞에 떠 있는 게 <b>국제우주정거장</b>이에요. 지금도 사람이 저 안에 살아요. 90분에 지구를 한 바퀴씩 돌아요.<br><br>여기서 지구를 본 우주인들은 비슷한 말을 남겼어요. 위에서 보니 <b>국경선이 없더라</b>, 우리가 왜 그렇게 다퉜는지 모르겠더라. 이 마음을 '조망 효과'라고 불러요." },
   { t: "멀어지는 지구", pv: true, alt: 30000, liveAlt: "지구에서", go(){
       realTime(); PV.setPatch(34, 127);
       pvEnter(); PV.set({ lat: 30, lon: 126.6, alt: 1500, az: 0, el: -89.9, fov: 60 });
@@ -741,7 +784,7 @@ const CH = [
     p: () => { const au = Math.hypot(pos.voyager1.x, pos.voyager1.y, pos.voyager1.z), sec = au * LIGHT_AU_S;
       return `1977년에 떠난 보이저 1호는 지금 지구에서 약 <b>${fmtKm(au * AU_KM)}</b>, 빛으로도 <b>${fmtDur(sec)}</b> 걸리는 곳에 있어요. 50년 가까이 지난 지금도 집으로 신호를 보내고 있습니다.`; } },
   { t: "창백한 푸른 점", pbd: true, alt: 6e9, altNote: "1990년 보이저 1호의 자리", photo: "pbd", modelLabel: "🎯 지구 위치 표시 보기", go(){ openPBD(); },
-    p: "1990년 2월 14일, 태양계 밖으로 나가던 보이저 1호가 카메라를 돌려 마지막으로 집을 찍었어요. 약 60억 km 떨어진 곳에서요. 사진 속 지구는 햇빛 줄기 사이에 떠 있는, <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>이 사진을 찍자고 한 천문학자 칼 세이건은 이 점을 <b>'창백한 푸른 점'</b>이라고 불렀어요. 그리고 지금까지 있었던 모든 사람과 모든 일이 저 점 하나 위에서 벌어졌다는 것, 그러니 서로를 조금 더 너그럽게 대하고 우리의 하나뿐인 집을 아껴야 한다는 이야기를 남겼어요." },
+    p: "1990년 2월 14일, 태양계 밖으로 나가던 보이저 1호가 마지막으로 뒤를 돌아 집을 찍었어요. 60억 km 밖에서 본 지구는 햇빛 줄기 속 <b>화소 하나도 채우지 못하는 점</b>이었어요.<br><br>저 점 위에서 사람들은 더 넓은 땅, 더 많은 돈, 더 높은 자리를 두고 평생을 다퉜어요. 그런데 여기서 보면 그 모든 것이 <b>점 하나 안의 일</b>이에요. 이긴 사람도 진 사람도, 부자도 가난한 사람도 같은 점 위에 있었어요.<br><br>그러니 더 가지려 애쓰기보다, 이 작은 점 위에서 서로에게 조금 더 다정하면 어떨까요. 우리가 아는 집은 아직 여기 하나뿐이니까요." },
   { t: "이웃 별", alt: 4.24 * LY_KM, photo: "stars", go(){ closeLayers(); goStep(5); },
     p: "가장 가까운 별, 프록시마 센타우리까지 빛으로 4년 3개월. 보이저 1호의 속도로 가면 <b>7만 년이 넘게</b> 걸려요." },
   { t: "우리 은하", alt: 26000 * LY_KM, altNote: "은하 중심까지", photo: "milkyway", go(){ goStep(8); },
@@ -749,12 +792,16 @@ const CH = [
   { t: "안드로메다 은하", alt: 2.5e6 * LY_KM, photo: "andromeda", go(){ goStep(10); },
     p: "지금 보이는 안드로메다의 빛은 <b>250만 년 전</b>에 출발했어요. 그 빛이 떠날 때 지구에는 아직 사람이 없었어요." },
   { t: "볼 수 있는 우주의 끝", alt: 4.65e10 * LY_KM, photo: "deep", go(){ goStep(12); },
-    p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에만 <b>은하가 수천억 개</b> 있어요." },
+    p: "지금 거리로 465억 광년. 우리가 볼 수 있는 우주의 끝이에요. 이 안에 <b>은하가 수천억 개</b>, 별은 바닷가 모래알보다 많아요.<br><br>공간으로 보면 우리는 이만큼 작아요. 그럼 시간으로 보면 어떨까요?" },
+  { t: "우주의 1년 달력", cal: true, alt: null, go(){ closeLayers(); hidePhoto(); showCal(); },
+    p: "우주가 태어나고 지금까지 138억 년을 <b>1년 달력</b>에 줄여 넣으면, 사람이 나타난 건 12월 31일 밤 11시 48분이에요. 장보고도, 이순신도, 기록된 모든 역사는 <b>마지막 11초</b> 안에 있어요.<br><br>그리고 당신의 한평생은 그 달력에서 <b>0.2초</b>, 눈 한 번 깜빡할 시간이에요." },
   { t: "다시 배 위로", pv: true, alt: 0.004, altNote: "다시 배 갑판", go(){
       pvEnter(); dayTime(); PV.setBob(true); PV.setProp("ship"); PV.set({ lat: 34.255, lon: 126.541, alt: 0.004, az: 155, el: 1.2, fov: 42 });
       PV.setMarkers([...islandMarks(), ...pvFerryMarks()]); PV.note(timeChip()); },
-    p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours();
-      return `그리고 다시 배 위. 이 넓은 우주에서 우리가 아는 집은 아직 여기 하나예요.<br><br>지금 노화도는 <b>${hh >= 6 && hh < 18 ? "낮" : "밤"}</b>이에요. ${journeyStats()}<br><br>그 모든 일이 저 작은 점 위에서, 바로 이곳에서 일어났어요.`; },
+    extra: () => [["✍️ 이 순간, 한 줄 남기기", writeLine]],
+    p: () => { const kst = new Date(PV.now() + 9*3600000), hh = kst.getUTCHours(), mine = (() => { try { return localStorage.getItem("pbd-line") || ""; } catch (e) { return ""; } })();
+      return `그리고 다시, 노화도 앞바다 배 위.<br><br>우리는 공간으로 보면 점 하나 위의 티끌이고, 시간으로 보면 0.2초예요. 그래서 허무할까요? 아니요. 그래서 <b>지금 이 순간이 귀해요.</b><br><br>더 갖지 못해 애태운 것들은 내려놓아도 괜찮아요. 저 점 위에서 진짜 남는 건 오늘 마주 앉은 사람과 나눈 밥 한 끼, 건넨 말 한마디, 바라본 바다 한 번이에요.<br><br>${journeyStats()}<br><br><b>그 0.2초를, 오늘 어떻게 쓰고 싶으세요?</b>` +
+        (mine ? `<div class="myline">“${mine.replace(/[<>&]/g, "")}”<small>— 당신이 남긴 한 줄</small></div>` : ""); },
     last: true }
 ];
 let cur = -1, liveTimer = null, hxTimer = null;
@@ -790,6 +837,7 @@ function show(i){
   if (!c.face) window.earthFace = null;
   if (!c.pv) pvLeave(); else PV.note("");
   if (!c.hx){ clearInterval(hxTimer); if (window.HX) HX.hide(); }
+  if (!c.cal) hideCal();
   c.go();
   if (c.photo && !c.photoLater) showPhoto(c.photo); else hidePhoto();
   preloadPhoto(i + 1);
@@ -804,7 +852,7 @@ function updateISSLive(){
 $("stNext").onclick = () => cur === CH.length - 1 ? show(0) : show(cur + 1);
 $("stPrev").onclick = () => show(cur - 1);
 $("stX").onclick = endStory;
-function endStory(){ clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
+function endStory(){ hideCal(); clearInterval(hxTimer); if (window.HX) HX.hide(); pvLeave(); hidePhoto(); window.earthFace = null; $("story").classList.remove("show"); document.body.classList.remove("storying"); closeLayers(); clearInterval(liveTimer); showISS = true; cur = -1;
   showToast("자유롭게 둘러보세요. 천체를 누르면 정보가 나와요"); }
 window.startStory = () => { storyT0 = Date.now();
   wantNight = false; document.body.classList.add("storying"); $("story").classList.add("show"); show(0); };
