@@ -155,7 +155,7 @@ async function openMap(mode = "ships"){
   if (!map){
     map = L.map("map", { zoomControl: false, attributionControl: true }).setView([NOHWA.lat - 0.04, NOHWA.lon], 10);
     baseSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 17, attribution: "위성사진 © Esri, Maxar, Earthstar Geographics" });
-    baseDark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 15, subdomains: "abcd", attribution: "© OpenStreetMap 기여자 © CARTO" });
+    baseDark = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16, attribution: "지도 © Esri" });
     radarRings = L.layerGroup();
     for (const km of [50, 100, 200]){ L.circle([NOHWA.lat, NOHWA.lon], { radius: km * 1000, color: "#3cff9a", weight: 1, opacity: 0.45, fill: false, dashArray: km === 200 ? null : "3 6" }).addTo(radarRings);
       L.marker([NOHWA.lat + km / 111, NOHWA.lon], { icon: L.divIcon({ className: "ship-ico", html: `<span style="color:#3cff9a;font-size:10px;opacity:.8">${km}km</span>`, iconSize: [40, 12], iconAnchor: [20, 12] }) }).addTo(radarRings); }
